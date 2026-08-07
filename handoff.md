@@ -1354,3 +1354,33 @@ Se añade inicialización explícita y única mediante `Q_INIT_RESOURCE(recursos
 `QIcon` y su pixmap de 16 px no sean nulos. Esto cubre el icono global, el icono individual de
 cada copia, el icono de ventana y las notificaciones. Pendiente del build/arranque en Windows
 para confirmar visualmente que desaparece el warning y el icono aparece en el system tray.
+
+### Sesión 42 — 2026-08-07 · motor overlapped: offsets, commits y E/S incompleta
+
+Se implementa la prioridad 1 de la auditoría: hacer segura la copia asíncrona de Windows frente
+a lecturas fuera de orden, E/S parcial y cambios de tamaño del origen.
+
+1. Cada ranura overlapped conserva ahora `offset`, bytes solicitados y bytes acumulados. El cursor
+   de lectura solo reserva offsets para llenar el pipeline; ya no se usa para decidir dónde
+   escribir.
+2. Las lecturas parciales se acumulan en la misma ranura y se relanza el resto en el offset
+   siguiente. Un EOF antes de completar el bloque esperado se convierte en `Resultado::Error`.
+   El tamaño se valida al abrir el origen y de nuevo antes de renombrar el parcial, detectando
+   truncamiento, crecimiento o eliminación durante la copia.
+3. Las escrituras se lanzan únicamente para la ranura cuyo offset coincide con el siguiente
+   `posEscritura`. Solo hay un commit de escritura en vuelo; el cursor avanza después de
+   `GetOverlappedResult` y únicamente si los bytes escritos coinciden exactamente con los bytes
+   solicitados. Una escritura corta conserva el `.mcpart` y devuelve error.
+4. El camino síncrono ya no trata un EOF prematuro como éxito y también exige haber alcanzado el
+   tamaño inicial. El tamaño final del origen se comprueba antes de reemplazar el destino y antes
+   de borrar el origen en modo mover.
+5. `pruebaf8` añade una copia grande con el método asíncrono para comprobar que los bloques
+   conservan su contenido/orden, y una regresión que trunca el origen entre el preflight y la E/S
+   y exige error sin destino final.
+
+Toolchain local instalado para validar la fase: Qt 6.4.2 de Ubuntu, Ninja 1.11.1 y MinGW-w64
+13.2.0. Validación realizada: build Linux completo con Ninja y `ctest --test-dir
+/home/user/workspace/maxcopier-build --output-on-failure` verde (4/4); compilación MinGW de
+`core/copia/backendwin32.cpp` y `core/copia/motordecopia.cpp` con warnings habilitados, incluyendo
+el camino `Q_OS_WIN`. No se enlazó el ejecutable Windows completo ni se ejecutó overlapped en
+Windows porque el entorno no tiene una distribución Qt MinGW para Windows ni un host Windows.

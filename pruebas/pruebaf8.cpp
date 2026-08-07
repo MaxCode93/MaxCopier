@@ -225,7 +225,43 @@ int main(int argc, char **argv)
     motor.copiar(origenMetodo, destinoMetodo, false, false);
     comprobar(resultado == MotorDeCopia::Resultado::Terminada
             && leer(destinoMetodo) == "contenido",
-        "el método asíncrono cae al síncrono fuera de Windows y copia igual");
+        "el método asíncrono copia correctamente un archivo pequeño");
+
+    // --- Método asíncrono: una cola de bloques debe conservar los offsets.
+    // En Windows esto entra en el backend overlapped real; fuera de Windows
+    // conserva la misma aserción mediante el camino síncrono.
+    const QString destinoAsincrono = QDir(base).filePath(QStringLiteral("asincrono-salida.bin"));
+    resultado = MotorDeCopia::Resultado::Error;
+    motor.reiniciar();
+    motor.establecerMetodo(MetodoDeCopia::Asincrono);
+    motor.copiar(origenGrande, destinoAsincrono, false, false);
+    comprobar(resultado == MotorDeCopia::Resultado::Terminada
+            && leer(destinoAsincrono) == grande,
+        "la copia asíncrona conserva el orden de los bloques y el contenido completo");
+
+    // --- El origen no puede truncarse entre el preflight y la E/S.
+    const QString origenTruncado = QDir(base).filePath(QStringLiteral("origen-truncado.bin"));
+    const QString destinoTruncado = QDir(base).filePath(QStringLiteral("truncado-salida.bin"));
+    const QByteArray contenidoTruncado = contenidoPatron(2 * 1024 * 1024);
+    comprobar(escribir(origenTruncado, contenidoTruncado),
+        "se prepara el archivo que se truncará durante el preflight");
+    bool truncado = false;
+    const QMetaObject::Connection alIniciar = QObject::connect(&motor,
+        &MotorDeCopia::iniciada,
+        &aplicacion,
+        [&](const QString &, const QString &, qint64) {
+            QFile archivo(origenTruncado);
+            truncado = archivo.open(QIODevice::ReadWrite)
+                && archivo.resize(contenidoTruncado.size() / 2);
+            archivo.close();
+        }, Qt::DirectConnection);
+    resultado = MotorDeCopia::Resultado::Error;
+    motor.reiniciar();
+    motor.copiar(origenTruncado, destinoTruncado, false, false);
+    QObject::disconnect(alIniciar);
+    comprobar(truncado && resultado == MotorDeCopia::Resultado::Error
+            && !QFileInfo::exists(destinoTruncado),
+        "un origen truncado no se publica como copia correcta ni crea destino final");
 
     // --- Archivo vacío: se deja un parcial vacío y se renombra al destino.
     const QString origenVacio = QDir(base).filePath(QStringLiteral("vacio.txt"));
