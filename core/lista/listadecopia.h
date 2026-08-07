@@ -5,6 +5,11 @@
 #include <QAbstractTableModel>
 #include <QList>
 
+#include <condition_variable>
+#include <mutex>
+#include <optional>
+#include <thread>
+
 namespace maxcopier {
 
 /// Modelo de la única lista de copia: plana, con columnas
@@ -27,6 +32,7 @@ public:
     };
 
     explicit ListaDeCopia(QObject *parent = nullptr);
+    ~ListaDeCopia() override;
 
     int rowCount(const QModelIndex &padre = QModelIndex()) const override;
     int columnCount(const QModelIndex &padre = QModelIndex()) const override;
@@ -47,6 +53,11 @@ public:
     /// Reorganiza la cola según `columna` y `orden`, anclando la fila en curso
     /// al principio como hace el reordenado a mano.
     void ordenarPor(Columna columna, Qt::SortOrder orden);
+
+    /// Solicita la misma ordenación sin ejecutarla en el hilo de la interfaz.
+    /// La tabla aplica el resultado cuando termina el hilo de trabajo; si la
+    /// lista cambió mientras tanto, el resultado se descarta.
+    void ordenarPorEnSegundoPlano(Columna columna, Qt::SortOrder orden);
 
     /// Filas que se están copiando ahora mismo (hasta «Archivos a la vez»);
     /// se pintan con la flecha y anclan el principio de la cola.
@@ -74,6 +85,25 @@ signals:
     void cambiada();
 
 private:
+    struct ResultadoOrdenacion {
+        ElementosDeCopia elementos;
+        QList<int> ordenOriginal;
+        int cantidadAnclas = 0;
+    };
+
+    struct TrabajoOrdenacion {
+        ElementosDeCopia elementos;
+        QList<int> enCurso;
+        Columna columna = ColumnaFuente;
+        Qt::SortOrder orden = Qt::AscendingOrder;
+        quint64 version = 0;
+        quint64 generacion = 0;
+    };
+
+    static ResultadoOrdenacion calcularOrdenacion(const ElementosDeCopia &elementos,
+        const QList<int> &enCurso, Columna columna, Qt::SortOrder orden);
+    void aplicarOrdenacion(ResultadoOrdenacion resultado);
+    void ejecutarOrdenaciones();
     QList<int> reubicar(QList<int> filas, bool haciaAbajo, bool alExtremo);
     void recalcularBytes();
 
@@ -82,6 +112,14 @@ private:
     // Se mantiene ordenada (en el orden en que arrancaron): son las primeras
     // filas de la cola y sirven de anclas para reordenar y ordenar.
     QList<int> m_enCurso;
+    quint64 m_version = 0;
+    quint64 m_generacionOrdenacion = 0;
+
+    std::thread m_hiloOrdenacion;
+    std::mutex m_mutexOrdenacion;
+    std::condition_variable m_condicionOrdenacion;
+    std::optional<TrabajoOrdenacion> m_trabajoOrdenacion;
+    bool m_detenerOrdenador = false;
 };
 
 } // namespace maxcopier

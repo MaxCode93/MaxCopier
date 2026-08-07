@@ -432,7 +432,7 @@ void PanelExpandido::ordenarColumna(int seccion)
         m_columnaOrden = seccion;
         m_orden = Qt::AscendingOrder;
     }
-    m_lista->ordenarPor(ListaDeCopia::Columna(seccion), m_orden);
+    m_lista->ordenarPorEnSegundoPlano(ListaDeCopia::Columna(seccion), m_orden);
     m_tabla->horizontalHeader()->setSortIndicator(seccion, m_orden);
 }
 

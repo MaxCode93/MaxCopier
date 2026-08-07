@@ -30,4 +30,5 @@ add_library(maxcopier_core STATIC
 )
 
 target_include_directories(maxcopier_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(maxcopier_core PUBLIC Qt6::Core)
+find_package(Threads REQUIRED)
+target_link_libraries(maxcopier_core PUBLIC Qt6::Core Threads::Threads)
