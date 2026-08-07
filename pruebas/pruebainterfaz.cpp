@@ -3,6 +3,7 @@
 #include "ventanaprincipal.h"
 #include "vistas/barraarchivos.h"
 #include "vistas/cargando.h"
+#include "vistas/iconos.h"
 #include "vistas/panelexpandido.h"
 
 #include <QApplication>
@@ -54,6 +55,10 @@ bool crearArchivo(const QString &ruta, char relleno)
 int main(int argc, char **argv)
 {
     QApplication aplicacion(argc, argv);
+
+    const QIcon icono = iconoDeLaApp();
+    comprobar(!icono.isNull() && !icono.pixmap(16, 16).isNull(),
+        "los recursos de iconos se inicializan desde la biblioteca estatica");
 
     // El overlay solo debe mostrar el indicador circular, nunca una barra
     // horizontal indeterminada.

@@ -4,6 +4,20 @@
 #include <QPainter>
 #include <QPixmap>
 
+// Los recursos pertenecen a maxcopier_app, una biblioteca estática. Sin una
+// referencia explícita el enlazador puede descartar el objeto generado por
+// AUTORCC y dejar los QIcon vacíos en el ejecutable final. Este helper vive en
+// el espacio global porque Q_INIT_RESOURCE declara el símbolo generado por
+// Qt en ese espacio.
+static void inicializarRecursosMaxCopier()
+{
+    static const bool inicializados = [] {
+        Q_INIT_RESOURCE(recursos);
+        return true;
+    }();
+    Q_UNUSED(inicializados);
+}
+
 namespace maxcopier {
 namespace {
 
@@ -74,6 +88,7 @@ namespace {
 
 QIcon iconoDeLaApp()
 {
+    inicializarRecursosMaxCopier();
     QIcon icono;
     for (int lado : kLados)
         icono.addFile(QStringLiteral(":/iconos/maxcopier-%1.png").arg(lado), QSize(lado, lado));
