@@ -169,6 +169,9 @@ private:
     /// Notificación del sistema con el resumen de la tanda recién terminada.
     void avisarDelFinal();
     void cancelarTrabajo();
+    void comprobarCancelacion();
+    void comprobarCierreSeguro();
+    void solicitarParadaDeHilos();
     void mostrarTransferenciaCancelada();
     void mostrarInactivo();
     void mostrarUnidadDe(const QString &carpeta);
@@ -228,6 +231,7 @@ private:
 
     Configuracion *m_configuracion = nullptr;
     bool m_cierreDefinitivo = false;
+    bool m_destruccionProgramada = false;
     bool m_minimizadaEnBandeja = false;
     BandejaCopia *m_bandejaCopia = nullptr;
     BarraTitulo *m_barraTitulo = nullptr;
