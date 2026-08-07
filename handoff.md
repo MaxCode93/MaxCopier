@@ -7,6 +7,15 @@ Estado del proyecto para retomarlo sin contexto previo (por una persona o por ot
 
 ## 1. Estado actual
 
+> **Bloqueo de release — auditoría de la sesión 40 (prioridad alta):** el estado histórico de
+> CI y de «sin problemas críticos» que aparece más abajo no representa la situación que hay que
+> dar por válida para esta rama. El commit actual contiene riesgos de integridad de datos,
+> cancelación, ciclo de vida de hilos, rutas y Shell/IPC que deben corregirse antes de afirmar
+> que MaxCopier es segura para producción. Además, este árbol no contiene `.github/workflows`, por
+> lo que el CI descrito en las secciones históricas debe restaurarse o verificarse de nuevo. La
+> copia en Windows asíncrona y la garantía de fluidez quedan expresamente pendientes de esta
+> fase prioritaria.
+
 - **Fase actual: parte 2 de Archivos a la vez hecha** (§4.8). El pool de motores por ventana ya
   aplica **Archivos a la vez** (1–4, por defecto 1): la ventana reparte la cola entre N motores en
   N hilos, con un **límite de velocidad compartido** (token bucket), diálogos de colisión/error
@@ -1229,3 +1238,119 @@ colas grandes.
 
 La ordenación pesada ya no se ejecuta en el hilo de la UI. La compilación y `ctest` de esta sesión
 siguen pendientes del CI porque el entorno del agente no tiene Qt 6 ni Ninja.
+
+### Sesión 40 — 2026-08-07 · auditoría transversal; prioridad alta antes de continuar fases
+
+Se auditó estáticamente toda la aplicación sobre el commit `5b79a0e` (`devin/ordenacion-asinc`),
+sin modificar código durante la auditoría. El resultado no permite aprobar la rama para release:
+hay fallos potenciales de corrupción silenciosa, pérdida de archivos, estados atascados, cierre
+con hilos vivos, excepciones no manejadas y contratos incompletos del Shell/IPC.
+
+#### P0/P1 — corregir antes de pruebas funcionales finales o release
+
+1. **Copia overlapped de Windows fuera de orden:** las lecturas pueden terminar en orden distinto
+   al solicitado, pero las ranuras se escriben en orden de contenedor y no por offset de origen;
+   un bloque puede ocupar la posición de otro (`core/copia/motordecopia.cpp`, alrededor de la
+   planificación en `:657` y escritura en `:693`).
+2. **E/S parcial no validada:** la escritura ignora bytes realmente escritos y la lectura avanza
+   por el tamaño pedido, no por el resultado real (`motordecopia.cpp`, `:628`, `:663`, `:699`).
+3. **Origen truncado o modificado reportado como éxito:** una lectura que acaba antes puede
+   finalizar, renombrar un destino parcial y, en mover, borrar el origen (`motordecopia.cpp`,
+   `:466` y `:637`). También se omite crecimiento del origen y no se verifica una instantánea.
+4. **Reanudación insegura:** `.mcpart` se reutiliza o elimina solo por nombre/tamaño, sin identidad
+   de origen, destino o versión; un parcial ajeno puede sobrescribirse, eliminarse o mezclarse con
+   otro archivo (`motordecopia.cpp`, `:339` y `:357`).
+5. **Pérdida del destino anterior en POSIX:** se elimina antes de intentar el `rename`; si este
+   falla, el archivo anterior se pierde (`motordecopia.cpp`, `:240`).
+6. **Solapamiento de rutas incompleto:** la protección es léxica y no resuelve symlinks, junctions
+   ni reparse points; un destino físico dentro del origen puede evadir la comprobación
+   (`core/util/rutas.cpp`, `:50`).
+7. **Colisiones TOCTOU:** se comprueba si el destino existe y luego se elige un nombre libre sin
+   reservarlo atómicamente; otra ventana o proceso puede tomarlo (`core/politicas/colision.cpp`,
+   `:8`).
+8. **Cierre con uso después de liberar memoria:** el destructor espera un tiempo limitado, libera
+   el limitador y puede destruir `QThread` mientras los motores siguen copiando; puede producir
+   `use-after-free`, `QThread: Destroyed while thread is still running` o crash
+   (`app/ventanaprincipal.cpp`, `:209`).
+9. **Cancelación desde la ventana puede dejar la app ocupada para siempre:** el camino de
+   `m_cancelandoTrabajo` retorna sin limpiar todos los estados de copia/lista
+   (`ventanaprincipal.cpp`, `:1593`).
+10. **Carrera entre escaneos:** las señales de escaneo no transportan generación; el `terminado`
+    de una enumeración vieja puede cerrar prematuramente la nueva y mezclar listas
+    (`ventanaprincipal.cpp`, `:1050`; `core/escaneo/escaner.h`).
+11. **Escaneo incompleto declarado correcto:** archivos inexistentes, sin permisos o subárboles
+    inaccesibles se omiten sin error; la copia puede terminar con elementos faltantes
+    (`core/escaneo/escaner.cpp`, `:77`).
+12. **Falta de espacio sin reintento usable:** la cola queda marcada y bloqueada, pero no existe
+    una acción clara que vuelva a comprobar y reanude la misma cola
+    (`app/ventanaprincipal.cpp`, `:541`).
+13. **Reconexión sensible a mayúsculas en Windows:** raíces como `C:/` y `c:/` no siempre se
+    remapean de forma equivalente (`core/util/espaciolibre.cpp`, `:41`; `app/ventanaprincipal.cpp`,
+    `:149`).
+14. **Destino físico duplicado por comparación sensible a mayúsculas:** el gestor puede crear
+    ventanas separadas para el mismo destino en Windows (`app/gestordeventanas.cpp`, `:323`).
+15. **Drag/drop confirma COPY antes de conocer el resultado IPC:** Explorer puede perder la
+    operación si el hilo de entrega falla después (`shell/extension.cpp`, `:322`; `shell/cliente.cpp`,
+    `:191`).
+16. **Registro del Shell destructivo:** la instalación sobrescribe handlers existentes y la retirada
+    borra claves completas sin restaurarlos (`shell/registro.cpp`, `:182`).
+
+#### P2 — corregir en la misma línea de estabilización
+
+- El worker de ordenación puede terminar el proceso: `std::thread` puede lanzar `system_error` y
+  las excepciones de `stable_sort` escapan del hilo (`core/lista/listadecopia.cpp`, `:264` y `:362`).
+- La ordenación ya calcula fuera de la UI, pero aplicar el layout, proxy, filtrado y repintado de
+  miles de filas aún puede producir pausas; no prometer «cero bloqueo» para listas ilimitadas sin
+  virtualización o actualización por lotes (`core/lista/listadecopia.cpp`, `:41`; `app/vistas/panelexpandido.cpp`, `:81`).
+- El token bucket de velocidad no actualiza de forma atómica época y presupuesto compartidos
+  (`core/copia/limitadorvelocidad.cpp`, `:24`).
+- La carga de `.mclist` admite conteos, tamaños, rutas y valores inválidos sin límites ni
+  comprobación de `ok`; además usa tamaños guardados que pueden estar obsoletos
+  (`app/ventanaprincipal.cpp`, `:1843`).
+- La suma de espacio puede desbordar `qint64` o ignorar un volumen no disponible
+  (`core/util/espaciolibre.cpp`, `:163`).
+- IPC: cliente lento sin plazo total, cierre que puede esperar indefinidamente, ACK perdido que
+  puede duplicar peticiones y callback ignorado durante apagado (`core/ipc/tuberia.h`, `:80`;
+  `core/ipc/servidor.h`, `:69`).
+- Instancia única POSIX vulnerable a carrera al eliminar/recrear el socket; el fallback puede
+  iniciar una segunda instancia tras una entrega cuyo ACK se perdió (`app/instanciaunica.cpp`, `:78`).
+- Fallback `.mxc` usa PID + `GetTickCount` y `CREATE_ALWAYS`, con posible colisión
+  (`shell/cliente.cpp`, `:127`).
+- Registro Shell y rutas de instalación usan `MAX_PATH` y omiten errores HRESULT
+  (`shell/registro.cpp`, `:76`).
+- Taskbar ignora `HRESULT`, no llama a `HrInit()` y puede desinicializar COM que no inicializó
+  (`app/bandejatarea.cpp`, `:38`).
+- Guardar el registro y abrir URLs ignoran el resultado de escritura/apertura
+  (`app/vistas/panelexpandido.cpp`, `:240`; `app/ventanaprincipal.cpp`, `:1939`).
+- El menú global y su activación no restauran una copia; esto contradice parte de la documentación
+  histórica de la bandeja (`app/bandeja.cpp`, `:144`).
+- El estado del handoff afirma CI restaurado y ausencia de fallos críticos, pero el commit auditado
+  no contiene `.github/workflows`; debe verificarse y corregirse la documentación/proceso.
+
+#### Plan obligatorio de estabilización
+
+1. Corregir el motor overlapped y añadir pruebas de orden fuera de secuencia, E/S parcial,
+   truncamiento y desconexión.
+2. Hacer cancelación y destrucción cooperativas: ningún `QThread` ni dependencia se libera hasta
+   que todos los motores hayan terminado realmente.
+3. Corregir generaciones de escaneo, errores de enumeración, reintento de espacio y rutas físicas.
+4. Hacer segura la reanudación `.mcpart`, el reemplazo atómico y la reserva de destinos.
+5. Endurecer Shell/IPC/instancia única y restaurar/verificar CI Windows/Linux.
+6. Solo después repetir pruebas funcionales y retest visual en Windows.
+
+Validación de esta auditoría: no se pudo compilar ni ejecutar `ctest` en el entorno del agente por
+falta de Qt 6, Ninja y toolchain Windows; `git diff --check` sí pasó. El retest real de Windows
+queda pendiente.
+
+### Sesión 41 — 2026-08-07 · corrección rápida del icono de bandeja al arrancar
+
+El usuario reportó que `MaxCopier.exe` quedaba en segundo plano y Qt mostraba
+`QSystemTrayIcon::setVisible: No Icon set`. La causa era que los PNG del `.qrc` están dentro de
+la biblioteca estática `maxcopier_app`; el enlazador podía descartar el objeto AUTORCC al no haber
+una referencia explícita, por lo que `iconoDeLaApp()` devolvía un `QIcon` vacío.
+
+Se añade inicialización explícita y única mediante `Q_INIT_RESOURCE(recursos)` en
+`app/vistas/iconos.cpp`, antes de construir cualquier icono. `pruebainterfaz` comprueba que el
+`QIcon` y su pixmap de 16 px no sean nulos. Esto cubre el icono global, el icono individual de
+cada copia, el icono de ventana y las notificaciones. Pendiente del build/arranque en Windows
+para confirmar visualmente que desaparece el warning y el icono aparece en el system tray.
