@@ -3,6 +3,8 @@
 #include "util/formatos.h"
 
 #include <QDir>
+#include <QMetaObject>
+#include <QPointer>
 
 #include <algorithm>
 #include <utility>
@@ -12,6 +14,18 @@ namespace maxcopier {
 ListaDeCopia::ListaDeCopia(QObject *parent)
     : QAbstractTableModel(parent)
 {
+}
+
+ListaDeCopia::~ListaDeCopia()
+{
+    {
+        std::lock_guard<std::mutex> bloqueo(m_mutexOrdenacion);
+        m_detenerOrdenador = true;
+        m_trabajoOrdenacion.reset();
+    }
+    m_condicionOrdenacion.notify_one();
+    if (m_hiloOrdenacion.joinable())
+        m_hiloOrdenacion.join();
 }
 
 int ListaDeCopia::rowCount(const QModelIndex &padre) const
@@ -84,6 +98,7 @@ void ListaDeCopia::anadir(const ElementosDeCopia &elementos)
     for (const ElementoDeCopia &elemento : elementos)
         m_bytes += elemento.tamano;
     endInsertRows();
+    ++m_version;
     emit cambiada();
 }
 
@@ -105,6 +120,7 @@ void ListaDeCopia::quitar(QList<int> filas)
         endRemoveRows();
     }
     recalcularBytes();
+    ++m_version;
     emit cambiada();
 }
 
@@ -122,6 +138,7 @@ void ListaDeCopia::quitarTerminada(int fila)
     }
     endRemoveRows();
     recalcularBytes();
+    ++m_version;
     emit cambiada();
 }
 
@@ -150,6 +167,7 @@ void ListaDeCopia::remapearDestinos(const QString &raizVieja, const QString &rai
 
     beginResetModel();
     endResetModel();
+    ++m_version;
     emit cambiada();
 }
 
@@ -169,6 +187,7 @@ void ListaDeCopia::vaciar()
         m_enCurso.append(i);
     endResetModel();
     recalcularBytes();
+    ++m_version;
     emit cambiada();
 }
 
@@ -184,6 +203,7 @@ void ListaDeCopia::marcarEnCurso(int fila, bool activa)
         m_enCurso.removeAll(fila);
 
     const QModelIndex indice = index(fila, ColumnaMarca);
+    ++m_version;
     emit dataChanged(indice, indice, { Qt::DisplayRole });
 }
 
@@ -194,6 +214,7 @@ void ListaDeCopia::desmarcarTodas()
     const QModelIndex primero = index(0, ColumnaMarca);
     const QModelIndex ultimo = index(int(m_elementos.size()) - 1, ColumnaMarca);
     m_enCurso.clear();
+    ++m_version;
     emit dataChanged(primero, ultimo, { Qt::DisplayRole });
 }
 
@@ -222,36 +243,67 @@ void ListaDeCopia::ordenarPor(Columna columna, Qt::SortOrder orden)
     if (columna != ColumnaFuente && columna != ColumnaTamano && columna != ColumnaDestino)
         return;
 
+    ++m_generacionOrdenacion;
+    aplicarOrdenacion(calcularOrdenacion(m_elementos, m_enCurso, columna, orden));
+}
+
+void ListaDeCopia::ordenarPorEnSegundoPlano(Columna columna, Qt::SortOrder orden)
+{
+    if (columna != ColumnaFuente && columna != ColumnaTamano && columna != ColumnaDestino)
+        return;
+
+    TrabajoOrdenacion trabajo;
+    trabajo.elementos = m_elementos;
+    trabajo.enCurso = m_enCurso;
+    trabajo.columna = columna;
+    trabajo.orden = orden;
+    trabajo.version = m_version;
+    trabajo.generacion = ++m_generacionOrdenacion;
+
+    {
+        std::lock_guard<std::mutex> bloqueo(m_mutexOrdenacion);
+        if (!m_hiloOrdenacion.joinable())
+            m_hiloOrdenacion = std::thread(&ListaDeCopia::ejecutarOrdenaciones, this);
+        // Si el usuario pulsa varias cabeceras seguidas, solo hace falta
+        // conservar la solicitud más reciente. El trabajo que ya esté
+        // calculándose se descartará al volver al hilo de la interfaz.
+        m_trabajoOrdenacion = std::move(trabajo);
+    }
+    m_condicionOrdenacion.notify_one();
+}
+
+ListaDeCopia::ResultadoOrdenacion ListaDeCopia::calcularOrdenacion(
+    const ElementosDeCopia &elementos, const QList<int> &enCurso,
+    Columna columna, Qt::SortOrder orden)
+{
     // No se debe tocar el orden de las filas activas: los motores guardan el
     // elemento que están copiando y esas filas son las anclas de la cola.
     // Precalcular la clave evita convertir y plegar cada ruta en cada
-    // comparación de `stable_sort`; con una carpeta grande esa diferencia
-    // bloquea menos tiempo el hilo de la interfaz mientras siguen llegando
-    // señales de progreso de los motores.
+    // comparación de `stable_sort`; este trabajo se puede ejecutar fuera del
+    // hilo de la interfaz.
     struct PendienteOrdenado {
         ElementoDeCopia elemento;
         QString clave;
         int filaOriginal = -1;
     };
 
-    const QModelIndexList indicesPersistentes = persistentIndexList();
-
-    // Las filas en curso anclan el principio: la ordenación solo reorganiza lo
-    // pendiente, igual que el reordenado a mano.
+    ResultadoOrdenacion resultado;
     ElementosDeCopia anclas;
-    QList<int> ordenNuevo;
-    ordenNuevo.reserve(m_elementos.size());
-    for (int fila : m_enCurso)
-        anclas.append(m_elementos.at(fila));
-    for (int fila : m_enCurso)
-        ordenNuevo.append(fila);
+    resultado.ordenOriginal.reserve(elementos.size());
+    for (int fila : enCurso) {
+        if (fila < 0 || fila >= elementos.size())
+            continue;
+        anclas.append(elementos.at(fila));
+        resultado.ordenOriginal.append(fila);
+    }
     QList<PendienteOrdenado> pendientes;
-    for (int i = 0; i < m_elementos.size(); ++i) {
-        if (m_enCurso.contains(i))
+    pendientes.reserve(elementos.size() - anclas.size());
+    for (int i = 0; i < elementos.size(); ++i) {
+        if (enCurso.contains(i))
             continue;
 
         PendienteOrdenado pendiente;
-        pendiente.elemento = m_elementos.at(i);
+        pendiente.elemento = elementos.at(i);
         pendiente.filaOriginal = i;
         if (columna != ColumnaTamano) {
             const QString &ruta = columna == ColumnaDestino
@@ -284,22 +336,70 @@ void ListaDeCopia::ordenarPor(Columna columna, Qt::SortOrder orden)
     ordenados.reserve(pendientes.size());
     for (const PendienteOrdenado &pendiente : pendientes) {
         ordenados.append(pendiente.elemento);
-        ordenNuevo.append(pendiente.filaOriginal);
+        resultado.ordenOriginal.append(pendiente.filaOriginal);
     }
+
+    resultado.elementos = anclas + ordenados;
+    resultado.cantidadAnclas = anclas.size();
+    return resultado;
+}
+
+void ListaDeCopia::ejecutarOrdenaciones()
+{
+    while (true) {
+        TrabajoOrdenacion trabajo;
+        {
+            std::unique_lock<std::mutex> bloqueo(m_mutexOrdenacion);
+            m_condicionOrdenacion.wait(bloqueo, [this] {
+                return m_detenerOrdenador || m_trabajoOrdenacion.has_value();
+            });
+            if (m_detenerOrdenador)
+                return;
+            trabajo = std::move(*m_trabajoOrdenacion);
+            m_trabajoOrdenacion.reset();
+        }
+
+        ResultadoOrdenacion resultado = calcularOrdenacion(
+            trabajo.elementos, trabajo.enCurso, trabajo.columna, trabajo.orden);
+        QPointer<ListaDeCopia> modelo(this);
+        if (!modelo)
+            continue;
+        QMetaObject::invokeMethod(modelo.data(),
+            [modelo, resultado = std::move(resultado), version = trabajo.version,
+                generacion = trabajo.generacion]() mutable {
+                if (!modelo || modelo->m_version != version
+                    || modelo->m_generacionOrdenacion != generacion)
+                    return;
+                modelo->aplicarOrdenacion(std::move(resultado));
+            },
+            Qt::QueuedConnection);
+    }
+}
+
+void ListaDeCopia::aplicarOrdenacion(ResultadoOrdenacion resultado)
+{
+    if (resultado.elementos.size() != m_elementos.size()
+        || resultado.ordenOriginal.size() != m_elementos.size())
+        return;
+
+    const QModelIndexList indicesPersistentes = persistentIndexList();
 
     // Es una reordenación de las mismas filas, no un cambio de contenido. Un
     // reset completo obliga al proxy y a la tabla a reconstruir toda la vista
     // y puede dejar en cola las señales de progreso mientras se copia. El
     // cambio de layout conserva el estado visual y las filas activas.
     emit layoutAboutToBeChanged({}, QAbstractItemModel::VerticalSortHint);
-    m_elementos = anclas + ordenados;
+    m_elementos = std::move(resultado.elementos);
     m_enCurso.clear();
-    for (int i = 0; i < anclas.size(); ++i)
+    for (int i = 0; i < resultado.cantidadAnclas; ++i)
         m_enCurso.append(i);
 
     QList<int> filaNueva(m_elementos.size(), -1);
-    for (int i = 0; i < ordenNuevo.size(); ++i)
-        filaNueva[ordenNuevo.at(i)] = i;
+    for (int i = 0; i < resultado.ordenOriginal.size(); ++i) {
+        const int filaOriginal = resultado.ordenOriginal.at(i);
+        if (filaOriginal >= 0 && filaOriginal < filaNueva.size())
+            filaNueva[filaOriginal] = i;
+    }
 
     QModelIndexList indicesNuevos;
     indicesNuevos.reserve(indicesPersistentes.size());
@@ -311,6 +411,7 @@ void ListaDeCopia::ordenarPor(Columna columna, Qt::SortOrder orden)
             indicesNuevos.append(QModelIndex());
     }
     changePersistentIndexList(indicesPersistentes, indicesNuevos);
+    ++m_version;
     emit layoutChanged({}, QAbstractItemModel::VerticalSortHint);
     emit cambiada();
 }
@@ -354,6 +455,7 @@ QList<int> ListaDeCopia::reubicar(QList<int> filas, bool haciaAbajo, bool alExtr
                 nuevas.append(anterior);
             }
         }
+        ++m_version;
         emit dataChanged(index(0, 0), index(int(m_elementos.size()) - 1, NumeroDeColumnas - 1));
         return nuevas;
     }
@@ -369,6 +471,7 @@ QList<int> ListaDeCopia::reubicar(QList<int> filas, bool haciaAbajo, bool alExtr
     // Las anclas ocupan 0..primeraLibre-1 y no se han movido: sus índices
     // siguen siendo los mismos.
     endResetModel();
+    ++m_version;
 
     QList<int> nuevas;
     for (int i = 0; i < movidos.size(); ++i)

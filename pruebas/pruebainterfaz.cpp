@@ -8,6 +8,7 @@
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QTemporaryDir>
@@ -72,6 +73,21 @@ int main(int argc, char **argv)
     comprobar(temporal.isValid(), "se crea el directorio temporal de la prueba de pausa");
     if (!temporal.isValid())
         return 1;
+
+    // La ordenación de la tabla se calcula fuera del hilo de la interfaz y
+    // solo publica el resultado al volver al event loop.
+    {
+        ListaDeCopia lista;
+        lista.anadir({
+            { temporal.filePath(QStringLiteral("z.txt")), temporal.filePath(QStringLiteral("z-destino")), 10 },
+            { temporal.filePath(QStringLiteral("a.txt")), temporal.filePath(QStringLiteral("a-destino")), 30 },
+            { temporal.filePath(QStringLiteral("m.txt")), temporal.filePath(QStringLiteral("m-destino")), 20 },
+        });
+        lista.ordenarPorEnSegundoPlano(ListaDeCopia::ColumnaFuente, Qt::AscendingOrder);
+        comprobar(esperar(aplicacion, [&] {
+            return QFileInfo(lista.elemento(0).fuente).fileName() == QStringLiteral("a.txt");
+        }, 3000), "la ordenación en segundo plano devuelve el resultado sin bloquear la UI");
+    }
 
     const QString origen = temporal.filePath(QStringLiteral("origen"));
     const QString destino = temporal.filePath(QStringLiteral("destino"));

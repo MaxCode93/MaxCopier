@@ -41,6 +41,12 @@ Estado del proyecto para retomarlo sin contexto previo (por una persona o por ot
   prueba de fecha a `QTimeZone::utc()` para Qt 6.11. La validación local de esta sesión queda
   pendiente porque el entorno de desarrollo no tiene Qt 6; `git diff --check` pasa y el CI del PR
   debe confirmar la compilación Windows/Linux.
+- **Sesión 39 — ordenación sin trabajo pesado en la UI:** la ordenación de la lista se solicita
+  mediante `ListaDeCopia::ordenarPorEnSegundoPlano`. Una instantánea implícitamente compartida se
+  ordena en un hilo dedicado; el resultado vuelve por el event loop y solo se aplica si la versión
+  de la cola y la generación de la solicitud siguen vigentes. Las solicitudes anteriores se
+  descartan, y las filas activas continúan ancladas. El panel expandido ya usa esta ruta y hay una
+  regresión que espera el resultado asíncrono mientras procesa eventos.
 - **FS.1**: el menú contextual ya no se queda en «No se ha podido hablar con MaxCopier»; el canal
   con el Explorador se rehizo de arriba abajo (§4.3) y tiene prueba automática.
 - Antes: **FS terminada** (integración con el Explorador: extensión de shell, §4.2), con la que
@@ -1202,3 +1208,24 @@ que deja de copiar.
 
 `git diff --check` pasa. En el entorno que preparó esta sesión no están instalados Qt 6 ni Ninja,
 por lo que la compilación y `ctest` quedan para el CI del PR y para el retest del usuario en Windows.
+
+### Sesión 39 — 2026-08-07 · ordenación asíncrona para mantener fluida la UI
+El usuario pide que reordenar la lista durante una copia no bloquee ni produzca lag, incluso con
+colas grandes.
+
+1. `ListaDeCopia` conserva su ordenación síncrona para las pruebas de modelo, pero expone
+   `ordenarPorEnSegundoPlano` para la UI. La solicitud copia de forma implícitamente compartida los
+   elementos y las anclas, y un hilo dedicado calcula las claves y ejecuta `stable_sort` fuera del
+   hilo de la interfaz.
+2. El resultado se publica mediante una llamada encolada al hilo de la ventana. La lista mantiene
+   un contador de versión y una generación de ordenación: si se añade, quita, termina o marca una
+   fila mientras se calcula, el resultado obsoleto se descarta; si se pulsa otra cabecera, solo se
+   conserva la petición más reciente pendiente.
+3. La aplicación final conserva el cambio de layout, los índices persistentes y las filas activas
+   ancladas. El panel expandido usa la ruta asíncrona y `pruebainterfaz` comprueba que una cola
+   independiente se ordena mientras el event loop sigue procesando eventos. `Threads::Threads` se
+   enlaza explícitamente desde `maxcopier_core` para que el trabajador sea portable en Linux y
+   MinGW.
+
+La ordenación pesada ya no se ejecuta en el hilo de la UI. La compilación y `ctest` de esta sesión
+siguen pendientes del CI porque el entorno del agente no tiene Qt 6 ni Ninja.
