@@ -353,6 +353,11 @@ void MotorDeCopia::copiar(const QString &origen, const QString &destino, bool so
     }
     const qint64 total = origenIO->tamano();
     origenIO->cerrar();
+    if (total < 0) {
+        emit terminada(Resultado::Error,
+            tr("No se puede obtener el tamaño de «%1».").arg(origen));
+        return;
+    }
 
     // Reanudación de parciales: si queda un `.mcpart` válido (mismo tamaño o
     // menor que el origen), se continúa desde donde se quedó. Un parcial más
@@ -381,6 +386,20 @@ void MotorDeCopia::copiar(const QString &origen, const QString &destino, bool so
     else
 #endif
         copiarSincrono(origen, parcial, total, resumido, &resultado, &error, &copiado);
+
+    // El tamaño inicial solo sirve para planificar la copia. El origen puede
+    // haberse truncado, eliminado o haber crecido mientras se copiaba; nunca
+    // se debe publicar como correcta una copia que ya no corresponde a la
+    // instantánea con la que se hizo el preflight. Esta comprobación ocurre
+    // antes de renombrar el parcial y antes de borrar el origen en modo mover.
+    if (resultado == Resultado::Terminada) {
+        qint64 tamanoFinal = -1;
+        if (!tamanoArchivo(origen, &tamanoFinal) || tamanoFinal != total) {
+            resultado = Resultado::Error;
+            error = tr("El origen «%1» cambió de tamaño durante la copia; se conserva el parcial.")
+                        .arg(origen);
+        }
+    }
 
     // Un archivo vacío no llega a crear el `.mcpart`; se deja un parcial vacío
     // para poder renombrarlo al destino igual que cualquier otro archivo.
@@ -487,8 +506,11 @@ void MotorDeCopia::copiarSincrono(const QString &origen, const QString &parcial,
             *error = tr("Error al leer «%1»: %2").arg(origen, motivoOperacion);
             break;
         }
-        if (leidos == 0)
-            break; // el archivo se ha quedado más corto de lo que decía su tamaño
+        if (leidos == 0) {
+            *resultado = Resultado::Error;
+            *error = tr("El origen «%1» se truncó durante la copia.").arg(origen);
+            break;
+        }
 
         if (!destinoIO->escribir(bloque.constData(), leidos, &motivoOperacion)) {
             *resultado = Resultado::Error;
@@ -509,6 +531,11 @@ void MotorDeCopia::copiarSincrono(const QString &origen, const QString &parcial,
             emit progreso(copiadoLocal, total, velocimetro.velocidad(),
                 velocimetro.segundosRestantes(total - copiadoLocal));
         }
+    }
+
+    if (*resultado == Resultado::Terminada && copiadoLocal != total) {
+        *resultado = Resultado::Error;
+        *error = tr("El origen «%1» se truncó durante la copia.").arg(origen);
     }
 
     if (*resultado == Resultado::Terminada && resumido < total) {
@@ -533,11 +560,19 @@ void MotorDeCopia::copiarAsincrono(const QString &origen, const QString &parcial
     std::wstring detalle;
     void *hOrigen = nullptr;
     void *hDestino = nullptr;
+    std::uint64_t tamanoAlAbrir = 0;
 
-    if (!win32::abrirLecturaAsincrona(origen.toStdWString(), &hOrigen, nullptr, &detalle)) {
+    if (!win32::abrirLecturaAsincrona(
+            origen.toStdWString(), &hOrigen, &tamanoAlAbrir, &detalle)) {
         *resultado = Resultado::Error;
         *error = tr("No se puede leer «%1»: %2")
                      .arg(origen, QString::fromStdWString(detalle));
+        return;
+    }
+    if (tamanoAlAbrir != static_cast<std::uint64_t>(total)) {
+        win32::cerrar(hOrigen);
+        *resultado = Resultado::Error;
+        *error = tr("El origen «%1» cambió de tamaño antes de copiarse.").arg(origen);
         return;
     }
 
@@ -560,6 +595,8 @@ void MotorDeCopia::copiarAsincrono(const QString &origen, const QString &parcial
         QByteArray datos;
         win32::IoAsincrono *io = nullptr;
         Estado estado = Libre;
+        qint64 offset = 0;
+        qint64 solicitado = 0;
         qint64 leidos = 0;
     };
     // Se redimensiona después de declarar: `std::vector<Ranura> ranuras(size_t(...))`
@@ -596,6 +633,15 @@ void MotorDeCopia::copiarAsincrono(const QString &origen, const QString &parcial
     const auto numeroPendientes = [&]() {
         int pendientes = 0;
         for (const Ranura &ranura : ranuras) {
+            if (ranura.estado != Ranura::Libre)
+                ++pendientes;
+        }
+        return pendientes;
+    };
+
+    const auto numeroEio = [&]() {
+        int pendientes = 0;
+        for (const Ranura &ranura : ranuras) {
             if (ranura.estado == Ranura::Leyendo || ranura.estado == Ranura::Escribiendo)
                 ++pendientes;
         }
@@ -610,6 +656,8 @@ void MotorDeCopia::copiarAsincrono(const QString &origen, const QString &parcial
         }
         if (!eventos.empty())
             win32::esperarEventos(eventos.data(), int(eventos.size()), 50, false);
+        else
+            QThread::msleep(1);
     };
 
     const auto avisarProgreso = [&]() {
@@ -622,34 +670,84 @@ void MotorDeCopia::copiarAsincrono(const QString &origen, const QString &parcial
         }
     };
 
+    const auto marcarOrigenInvalido = [&]() {
+        *resultado = Resultado::Error;
+        *error = tr("El origen «%1» se truncó o cambió durante la copia.").arg(origen);
+    };
+
+    const auto completarLectura = [&](Ranura &ranura) {
+        while (true) {
+            const std::int64_t leidos = win32::resultadoIo(ranura.io, &detalle);
+            if (leidos < 0) {
+                *resultado = Resultado::Error;
+                *error = tr("Error al leer «%1»: %2")
+                             .arg(origen, QString::fromStdWString(detalle));
+                return false;
+            }
+            const qint64 restantes = ranura.solicitado - ranura.leidos;
+            if (leidos <= 0 || leidos > restantes) {
+                marcarOrigenInvalido();
+                return false;
+            }
+            ranura.leidos += leidos;
+            if (ranura.leidos == ranura.solicitado) {
+                ranura.estado = Ranura::Leido;
+                return true;
+            }
+
+            // Una lectura corta no se da por buena ni se pierde: se pide el
+            // resto en el offset siguiente usando la misma ranura y buffer.
+            const std::int64_t est = win32::lanzarLectura(ranura.io, hOrigen,
+                ranura.datos.data() + ranura.leidos,
+                ranura.solicitado - ranura.leidos,
+                std::uint64_t(ranura.offset + ranura.leidos), &detalle);
+            if (est < 0) {
+                *resultado = Resultado::Error;
+                *error = tr("Error al leer «%1»: %2")
+                             .arg(origen, QString::fromStdWString(detalle));
+                return false;
+            }
+            ranura.estado = Ranura::Leyendo;
+            if (est != 0)
+                return true;
+            // E/S inmediata: el siguiente resultado se acumula en este mismo
+            // bucle, hasta completar exactamente el bloque solicitado.
+        }
+    };
+
+    const auto confirmarEscritura = [&](Ranura &ranura, std::int64_t escritos) {
+        if (escritos < 0) {
+            *resultado = Resultado::Error;
+            *error = tr("Error al escribir «%1»: %2")
+                         .arg(parcial, QString::fromStdWString(detalle));
+            return false;
+        }
+        if (escritos != ranura.leidos) {
+            *resultado = Resultado::Error;
+            *error = tr("Escritura incompleta en «%1»: se esperaban %2 bytes y se escribieron %3.")
+                         .arg(parcial).arg(ranura.leidos).arg(escritos);
+            return false;
+        }
+        const qint64 confirmados = ranura.leidos;
+        posEscritura += confirmados;
+        ranura.leidos = 0;
+        ranura.estado = Ranura::Libre;
+        if (m_limitador)
+            m_limitador->gastar(confirmados, m_pausa, m_cancelar);
+        avisarProgreso();
+        return true;
+    };
+
     const auto procesar = [&]() {
         for (Ranura &ranura : ranuras) {
-            if (ranura.estado == Ranura::Leyendo && win32::ioCompletado(ranura.io)) {
-                const std::int64_t leidos = win32::resultadoIo(ranura.io, &detalle);
-                if (leidos < 0) {
-                    *resultado = Resultado::Error;
-                    *error = tr("Error al leer «%1»: %2")
-                                 .arg(origen, QString::fromStdWString(detalle));
+            if (ranura.estado == Ranura::Leyendo && win32::ioCompletado(ranura.io)
+                && !completarLectura(ranura))
+                return;
+        }
+        for (Ranura &ranura : ranuras) {
+            if (ranura.estado == Ranura::Escribiendo && win32::ioCompletado(ranura.io)) {
+                if (!confirmarEscritura(ranura, win32::resultadoIo(ranura.io, &detalle)))
                     return;
-                }
-                ranura.estado = Ranura::Leido;
-                ranura.leidos = leidos;
-                // Un archivo más corto de lo que decía su tamaño termina aquí,
-                // igual que hace el síncrono: no se lanza una escritura vacía.
-                if (ranura.leidos == 0)
-                    ranura.estado = Ranura::Libre;
-            } else if (ranura.estado == Ranura::Escribiendo && win32::ioCompletado(ranura.io)) {
-                const std::int64_t escritos = win32::resultadoIo(ranura.io, &detalle);
-                if (escritos < 0) {
-                    *resultado = Resultado::Error;
-                    *error = tr("Error al escribir «%1»: %2")
-                                 .arg(parcial, QString::fromStdWString(detalle));
-                    return;
-                }
-                ranura.estado = Ranura::Libre;
-                if (m_limitador)
-                    m_limitador->gastar(escritos, m_pausa, m_cancelar);
-                avisarProgreso();
             }
         }
     };
@@ -660,32 +758,25 @@ void MotorDeCopia::copiarAsincrono(const QString &origen, const QString &parcial
                 return;
             if (ranura.estado != Ranura::Libre || posLectura >= total)
                 continue;
+            ranura.offset = posLectura;
+            ranura.solicitado = qMin(tamanoBloque, total - posLectura);
+            ranura.leidos = 0;
             const std::int64_t est = win32::lanzarLectura(ranura.io, hOrigen,
-                ranura.datos.data(), tamanoBloque, std::uint64_t(posLectura), &detalle);
+                ranura.datos.data(), ranura.solicitado, std::uint64_t(ranura.offset), &detalle);
             if (est < 0) {
                 *resultado = Resultado::Error;
                 *error = tr("Error al leer «%1»: %2")
                              .arg(origen, QString::fromStdWString(detalle));
                 return;
             }
-            posLectura += tamanoBloque;
+            // El cursor de lectura reserva el offset, pero nunca se usa como
+            // cursor de escritura: cada ranura conserva su posición original.
+            posLectura += ranura.solicitado;
             if (est == 0) {
-                const std::int64_t leidos = win32::resultadoIo(ranura.io, &detalle);
-                if (leidos < 0) {
-                    *resultado = Resultado::Error;
-                    *error = tr("Error al leer «%1»: %2")
-                                 .arg(origen, QString::fromStdWString(detalle));
+                if (!completarLectura(ranura))
                     return;
-                }
-                ranura.estado = Ranura::Leido;
-                ranura.leidos = leidos;
-                // Un archivo más corto de lo que decía su tamaño termina aquí,
-                // igual que hace el síncrono: no se lanza una escritura vacía.
-                if (ranura.leidos == 0)
-                    ranura.estado = Ranura::Libre;
             } else {
                 ranura.estado = Ranura::Leyendo;
-                ranura.leidos = 0;
             }
         }
     };
@@ -694,33 +785,27 @@ void MotorDeCopia::copiarAsincrono(const QString &origen, const QString &parcial
         for (Ranura &ranura : ranuras) {
             if (*resultado != Resultado::Terminada)
                 return;
-            if (ranura.estado != Ranura::Leido || ranura.leidos <= 0 || hDestino == nullptr)
+            if (ranura.estado != Ranura::Leido || ranura.leidos <= 0 || hDestino == nullptr
+                || ranura.offset != posEscritura)
                 continue;
             const std::int64_t est = win32::lanzarEscritura(ranura.io, hDestino,
-                ranura.datos.constData(), ranura.leidos, std::uint64_t(posEscritura), &detalle);
+                ranura.datos.constData(), ranura.leidos, std::uint64_t(ranura.offset), &detalle);
             if (est < 0) {
                 *resultado = Resultado::Error;
                 *error = tr("Error al escribir «%1»: %2")
                              .arg(parcial, QString::fromStdWString(detalle));
                 return;
             }
-            posEscritura += ranura.leidos;
-            ranura.leidos = 0;
             if (est == 0) {
-                const std::int64_t escritos = win32::resultadoIo(ranura.io, &detalle);
-                if (escritos < 0) {
-                    *resultado = Resultado::Error;
-                    *error = tr("Error al escribir «%1»: %2")
-                                 .arg(parcial, QString::fromStdWString(detalle));
+                if (!confirmarEscritura(ranura, win32::resultadoIo(ranura.io, &detalle)))
                     return;
-                }
-                ranura.estado = Ranura::Libre;
-                if (m_limitador)
-                    m_limitador->gastar(escritos, m_pausa, m_cancelar);
-                avisarProgreso();
             } else {
                 ranura.estado = Ranura::Escribiendo;
             }
+            // Solo se publica un commit a la vez y siempre para el siguiente
+            // offset contiguo. Las lecturas pueden ir adelantadas, pero nunca
+            // pueden hacer que el destino avance fuera de orden.
+            return;
         }
     };
 
@@ -753,7 +838,7 @@ void MotorDeCopia::copiarAsincrono(const QString &origen, const QString &parcial
         if (*resultado != Resultado::Terminada)
             break;
 
-        if (posLectura >= total && numeroPendientes() == 0)
+        if (posLectura >= total && posEscritura >= total && numeroPendientes() == 0)
             break;
 
         esperar();
@@ -768,13 +853,13 @@ void MotorDeCopia::copiarAsincrono(const QString &origen, const QString &parcial
     // acaban nunca), no se espera indefinidamente: cerrar los manejos cancela
     // las pendientes y la salida del proceso no puede quedarse colgada.
     int drenaje = 0;
-    while (numeroPendientes() > 0 && drenaje < 200) {
+    while (numeroEio() > 0 && drenaje < 200) {
         ++drenaje;
         esperar();
         for (Ranura &ranura : ranuras) {
             if (ranura.estado == Ranura::Leyendo && win32::ioCompletado(ranura.io)) {
                 win32::resultadoIo(ranura.io, nullptr);
-                ranura.estado = Ranura::Leido;
+                ranura.estado = Ranura::Libre;
             }
             if (ranura.estado == Ranura::Escribiendo && win32::ioCompletado(ranura.io)) {
                 win32::resultadoIo(ranura.io, nullptr);
@@ -783,6 +868,11 @@ void MotorDeCopia::copiarAsincrono(const QString &origen, const QString &parcial
         }
         if (m_cancelar.loadRelaxed() != 0)
             break;
+    }
+
+    if (*resultado == Resultado::Terminada && posEscritura != total) {
+        *resultado = Resultado::Error;
+        *error = tr("La copia asíncrona no alcanzó el tamaño esperado de «%1».").arg(parcial);
     }
 
     if (*resultado == Resultado::Terminada && resumido < total) {
