@@ -68,13 +68,24 @@ add_library(maxcopier_app STATIC ${MAXCOPIER_APP_SOURCES})
 target_include_directories(maxcopier_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(maxcopier_app PUBLIC maxcopier_core Qt6::Network Qt6::Widgets)
 
+# `accionfinal.cpp` pertenece a esta biblioteca estática y usa
+# `SetSuspendState`. La dependencia debe viajar con la biblioteca para que
+# también la reciban las pruebas que la enlazan (por ejemplo,
+# `pruebainterfaz`). Además, al ser una dependencia transitiva de la
+# biblioteca, CMake la coloca después de `libmaxcopier_app.a` en MinGW; si se
+# añade solo al ejecutable principal puede quedar antes de la biblioteca y el
+# enlazador no vuelve a resolverla.
+if(WIN32)
+    target_link_libraries(maxcopier_app PUBLIC powrprof)
+endif()
+
 qt_add_executable(maxcopier WIN32 main.cpp)
 
 # Icono del ejecutable: solo Windows mira el .rc. `advapi32` trae el descriptor
 # de seguridad de la tubería del canal (`core/ipc/tuberia.h`).
 if(WIN32)
     target_sources(maxcopier PRIVATE recursos/maxcopier.rc)
-    target_link_libraries(maxcopier PRIVATE advapi32 powrprof user32 ole32)
+    target_link_libraries(maxcopier PRIVATE advapi32 user32 ole32)
     target_compile_definitions(maxcopier_app PRIVATE _WIN32_WINNT=0x0601 NTDDI_VERSION=0x06010000)
     target_compile_definitions(maxcopier PRIVATE _WIN32_WINNT=0x0601 NTDDI_VERSION=0x06010000)
 endif()

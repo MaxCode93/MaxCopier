@@ -1,7 +1,9 @@
 #include "configuracion.h"
+#include "lista/listadecopia.h"
 #include "ventanaprincipal.h"
 #include "vistas/barraarchivos.h"
 #include "vistas/cargando.h"
+#include "vistas/panelexpandido.h"
 
 #include <QApplication>
 #include <QElapsedTimer>
@@ -76,7 +78,7 @@ int main(int argc, char **argv)
     comprobar(QDir().mkpath(destino), "se crea el destino de la prueba de pausa");
 
     QStringList origenes;
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 4; ++i) {
         const QString ruta = temporal.filePath(QStringLiteral("archivo-%1.bin").arg(i));
         comprobar(crearArchivo(ruta, char('a' + i)), "se prepara un archivo de la prueba de pausa");
         origenes.append(ruta);
@@ -97,6 +99,19 @@ int main(int argc, char **argv)
         return ventana.copiando() && barra && barra->cantidadDeArchivos() == 3;
     }, 8000);
     comprobar(inicio, "tres archivos llegan a la barra segmentada");
+
+    // Ordenar con varios motores activos no debe resetear la vista ni
+    // interferir con la cola: las tres filas activas se mantienen ancladas y
+    // el cuarto archivo sigue pendiente.
+    PanelExpandido *expandido = ventana.findChild<PanelExpandido *>();
+    bool ordenaciones = expandido != nullptr;
+    for (int columna : { ListaDeCopia::ColumnaFuente,
+             ListaDeCopia::ColumnaTamano, ListaDeCopia::ColumnaDestino }) {
+        ordenaciones = ordenaciones
+            && QMetaObject::invokeMethod(expandido, "ordenarColumna", Qt::DirectConnection,
+                Q_ARG(int, int(columna)));
+    }
+    comprobar(ordenaciones, "ordenar la cola durante una copia conserva los motores activos");
 
     ventana.pausarDesdeBandeja();
     const bool pausa = esperar(aplicacion, [&] { return ventana.pausada(); }, 1500);

@@ -5,6 +5,7 @@
 #include <QDir>
 
 #include <algorithm>
+#include <utility>
 
 namespace maxcopier {
 
@@ -221,33 +222,54 @@ void ListaDeCopia::ordenarPor(Columna columna, Qt::SortOrder orden)
     if (columna != ColumnaFuente && columna != ColumnaTamano && columna != ColumnaDestino)
         return;
 
-    beginResetModel();
+    // No se debe tocar el orden de las filas activas: los motores guardan el
+    // elemento que están copiando y esas filas son las anclas de la cola.
+    // Precalcular la clave evita convertir y plegar cada ruta en cada
+    // comparación de `stable_sort`; con una carpeta grande esa diferencia
+    // bloquea menos tiempo el hilo de la interfaz mientras siguen llegando
+    // señales de progreso de los motores.
+    struct PendienteOrdenado {
+        ElementoDeCopia elemento;
+        QString clave;
+        int filaOriginal = -1;
+    };
+
+    const QModelIndexList indicesPersistentes = persistentIndexList();
 
     // Las filas en curso anclan el principio: la ordenación solo reorganiza lo
     // pendiente, igual que el reordenado a mano.
     ElementosDeCopia anclas;
+    QList<int> ordenNuevo;
+    ordenNuevo.reserve(m_elementos.size());
     for (int fila : m_enCurso)
         anclas.append(m_elementos.at(fila));
-    ElementosDeCopia pendientes;
+    for (int fila : m_enCurso)
+        ordenNuevo.append(fila);
+    QList<PendienteOrdenado> pendientes;
     for (int i = 0; i < m_elementos.size(); ++i) {
-        if (!m_enCurso.contains(i))
-            pendientes.append(m_elementos.at(i));
+        if (m_enCurso.contains(i))
+            continue;
+
+        PendienteOrdenado pendiente;
+        pendiente.elemento = m_elementos.at(i);
+        pendiente.filaOriginal = i;
+        if (columna != ColumnaTamano) {
+            const QString &ruta = columna == ColumnaDestino
+                ? pendiente.elemento.destino
+                : pendiente.elemento.fuente;
+            pendiente.clave = QDir::fromNativeSeparators(ruta).toCaseFolded();
+        }
+        pendientes.append(std::move(pendiente));
     }
 
-    const auto criterio = [columna](const ElementoDeCopia &izquierda,
-                             const ElementoDeCopia &derecha) {
+    const auto criterio = [columna](const PendienteOrdenado &izquierda,
+                             const PendienteOrdenado &derecha) {
         if (columna == ColumnaTamano)
-            return izquierda.tamano < derecha.tamano;
-        const QString rutaIzquierda = columna == ColumnaDestino
-            ? izquierda.destino
-            : izquierda.fuente;
-        const QString rutaDerecha = columna == ColumnaDestino ? derecha.destino : derecha.fuente;
-        return QString::compare(QDir::fromNativeSeparators(rutaIzquierda).toCaseFolded(),
-                   QDir::fromNativeSeparators(rutaDerecha).toCaseFolded())
-            < 0;
+            return izquierda.elemento.tamano < derecha.elemento.tamano;
+        return QString::compare(izquierda.clave, derecha.clave) < 0;
     };
-    const auto antiCriterio = [&criterio](const ElementoDeCopia &izquierda,
-                                  const ElementoDeCopia &derecha) {
+    const auto antiCriterio = [&criterio](const PendienteOrdenado &izquierda,
+                                  const PendienteOrdenado &derecha) {
         return criterio(derecha, izquierda);
     };
 
@@ -258,12 +280,38 @@ void ListaDeCopia::ordenarPor(Columna columna, Qt::SortOrder orden)
             std::stable_sort(pendientes.begin(), pendientes.end(), antiCriterio);
     }
 
-    m_elementos = anclas + pendientes;
+    ElementosDeCopia ordenados;
+    ordenados.reserve(pendientes.size());
+    for (const PendienteOrdenado &pendiente : pendientes) {
+        ordenados.append(pendiente.elemento);
+        ordenNuevo.append(pendiente.filaOriginal);
+    }
+
+    // Es una reordenación de las mismas filas, no un cambio de contenido. Un
+    // reset completo obliga al proxy y a la tabla a reconstruir toda la vista
+    // y puede dejar en cola las señales de progreso mientras se copia. El
+    // cambio de layout conserva el estado visual y las filas activas.
+    emit layoutAboutToBeChanged({}, QAbstractItemModel::VerticalSortHint);
+    m_elementos = anclas + ordenados;
     m_enCurso.clear();
     for (int i = 0; i < anclas.size(); ++i)
         m_enCurso.append(i);
 
-    endResetModel();
+    QList<int> filaNueva(m_elementos.size(), -1);
+    for (int i = 0; i < ordenNuevo.size(); ++i)
+        filaNueva[ordenNuevo.at(i)] = i;
+
+    QModelIndexList indicesNuevos;
+    indicesNuevos.reserve(indicesPersistentes.size());
+    for (const QModelIndex &indice : indicesPersistentes) {
+        const int fila = indice.row();
+        if (fila >= 0 && fila < filaNueva.size() && filaNueva.at(fila) >= 0)
+            indicesNuevos.append(index(filaNueva.at(fila), indice.column()));
+        else
+            indicesNuevos.append(QModelIndex());
+    }
+    changePersistentIndexList(indicesPersistentes, indicesNuevos);
+    emit layoutChanged({}, QAbstractItemModel::VerticalSortHint);
     emit cambiada();
 }
 

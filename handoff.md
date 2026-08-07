@@ -32,6 +32,15 @@ Estado del proyecto para retomarlo sin contexto previo (por una persona o por ot
   arquitectura de bandeja estilo SuperCopier de F7: controlador
   global sin UI principal visible, una ventana y un icono de bandeja por transferencia, menús
   separados, cierre completo desde «Salir de MaxCopier» y redirección de avisos.
+- **Sesión 38 — corrección de compilación y ordenación de la cola:** `PowrProf` se declara como
+  dependencia transitiva de `maxcopier_app`, de modo que MinGW resuelve `SetSuspendState` tanto
+  en `MaxCopier.exe` como en `pruebainterfaz.exe`. La ordenación por Fuente/Tamaño/Destino ya no
+  resetea toda la tabla: conserva las filas activas mediante un cambio de layout y precalcula las
+  claves de ruta, evitando bloquear la interfaz mientras los motores siguen copiando. Se añadió
+  una regresión que ordena las tres columnas durante una copia con tres motores y se actualizó la
+  prueba de fecha a `QTimeZone::utc()` para Qt 6.11. La validación local de esta sesión queda
+  pendiente porque el entorno de desarrollo no tiene Qt 6; `git diff --check` pasa y el CI del PR
+  debe confirmar la compilación Windows/Linux.
 - **FS.1**: el menú contextual ya no se queda en «No se ha podido hablar con MaxCopier»; el canal
   con el Explorador se rehizo de arriba abajo (§4.3) y tiene prueba automática.
 - Antes: **FS terminada** (integración con el Explorador: extensión de shell, §4.2), con la que
@@ -1174,3 +1183,22 @@ enumeración:
 Validación Linux: compilación correcta y `ctest --test-dir build --output-on-failure` verde (4/4).
 Pendiente únicamente el retest visual/funcional en Windows con el artefacto del CI, especialmente
 la pausa con más de dos archivos y la respuesta al terminar una enumeración grande.
+
+### Sesión 38 — 2026-08-07 · enlace MinGW y ordenación durante la copia
+El usuario reporta dos problemas al compilar y usar la lista: `SetSuspendState` queda sin resolver
+con Qt 6.11/MinGW, y ordenar por Fuente, Tamaño o Destino ralentiza la transferencia hasta parecer
+que deja de copiar.
+
+1. `PowrProf` pasa a ser una dependencia `PUBLIC` de `maxcopier_app`, porque `accionfinal.cpp`
+   forma parte de esa biblioteca estática y también se enlaza desde `pruebainterfaz`. Se elimina
+   la dependencia directa prematura del ejecutable principal para que MinGW la coloque después de
+   `libmaxcopier_app.a` y pueda resolver `SetSuspendState`.
+2. `ListaDeCopia::ordenarPor` deja de hacer un reset completo del modelo. Emite cambio de layout,
+   actualiza los índices persistentes, mantiene las filas activas ancladas al principio y
+   precalcula las claves de las rutas antes de `stable_sort`. Así la tabla no se reconstruye
+   completamente ni compite tanto con las señales de progreso de los motores.
+3. `pruebainterfaz` ordena las tres columnas con tres archivos activos y uno pendiente; `pruebaf8`
+   usa la API de zona horaria no obsoleta de Qt 6.11.
+
+`git diff --check` pasa. En el entorno que preparó esta sesión no están instalados Qt 6 ni Ninja,
+por lo que la compilación y `ctest` quedan para el CI del PR y para el retest del usuario en Windows.

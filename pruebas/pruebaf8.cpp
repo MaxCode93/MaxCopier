@@ -17,6 +17,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QTemporaryDir>
+#include <QTime>
+#include <QTimeZone>
 
 #include <cstdio>
 #include <thread>
@@ -175,7 +177,7 @@ int main(int argc, char **argv)
     const QString destinoMeta = QDir(base).filePath(QStringLiteral("metadatos-salida.txt"));
     comprobar(escribir(origenMeta, "contenido"), "se prepara el archivo de metadatos");
     QFile meta(origenMeta);
-    const QDateTime fecha(QDate(2021, 3, 4), QTime(5, 6, 7), Qt::UTC);
+    const QDateTime fecha(QDate(2021, 3, 4), QTime(5, 6, 7), QTimeZone::utc());
     const bool abierto = meta.open(QIODevice::ReadOnly);
     const bool fechaFijada = abierto && meta.setFileTime(fecha, QFileDevice::FileModificationTime);
     meta.close();
