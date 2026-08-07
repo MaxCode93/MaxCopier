@@ -76,6 +76,10 @@ public slots:
     /// Baja las banderas de pausa, salto y cancelación.
     void reiniciar();
 
+    /// Fija explícitamente el estado de pausa. Es segura desde cualquier hilo
+    /// y evita que varias peticiones de una ventana con motores paralelos se
+    /// inviertan entre sí.
+    void establecerPausa(bool pausada);
     void alternarPausa();
     void saltar();
     void cancelar();

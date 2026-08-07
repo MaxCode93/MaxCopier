@@ -32,11 +32,16 @@ void Escaner::reiniciar()
     m_pausa.storeRelaxed(0);
 }
 
+void Escaner::establecerPausa(bool pausada)
+{
+    const int valor = pausada ? 1 : 0;
+    if (m_pausa.fetchAndStoreRelaxed(valor) != valor)
+        emit pausaCambiada(pausada);
+}
+
 void Escaner::alternarPausa()
 {
-    const bool pausar = m_pausa.loadRelaxed() == 0;
-    m_pausa.storeRelaxed(pausar ? 1 : 0);
-    emit pausaCambiada(pausar);
+    establecerPausa(m_pausa.loadRelaxed() == 0);
 }
 
 void Escaner::cancelar()

@@ -1411,3 +1411,24 @@ Validación local de la sesión: compilación Linux completa con CMake/Ninja y `
 incluyendo las regresiones de cancelación y cierre; `git diff --check` también pasa. La prueba
 cruzada de los hilos Qt y el cierre visual en el kit Qt 6.11/MinGW siguen requiriendo el host
 Windows del usuario.
+
+### Sesión 44 — 2026-08-07 · corrección urgente de pausa con varios archivos
+
+El usuario reportó que pausar una copia grande funcionaba, pero reanudarla no siempre volvía a
+mover los archivos. La ruta de pausa de la ventana alternaba cada motor a partir de su estado
+observado y, mientras varios hilos respondían, `m_pausada` podía cambiar durante esa misma petición.
+Ese protocolo podía dejar estados distintos entre los motores y mostrar una acción de bandeja
+incorrecta.
+
+1. `MotorDeCopia` y `Escaner` exponen ahora `establecerPausa(bool)`, que fija el estado absoluto
+   mediante la bandera atómica; `alternarPausa` queda como compatibilidad para los demás caminos.
+2. La ventana envía el mismo objetivo explícito a todos los motores activos. La UI conserva la
+   intención solicitada mientras los motores están en estado mixto y solo consolida el estado
+   observado cuando todos están pausados o todos reanudados. La pausa por dispositivo usa también
+   el setter explícito.
+3. `pruebainterfaz` ahora trabaja con 12 archivos y tres motores, y verifica que después de pulsar
+   reanudar el porcentaje vuelve a avanzar, además de esperar la finalización de toda la cola.
+
+Validación local: build Linux completo y `pruebainterfaz` verde; la prueba ampliada confirma pausa,
+reanudar y avance de una cola de muchos archivos. El kit Qt 6.11/MinGW y el backend overlapped real
+siguen requiriendo la ejecución en Windows.

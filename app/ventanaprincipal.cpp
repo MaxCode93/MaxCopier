@@ -266,24 +266,33 @@ void VentanaPrincipal::pausarDesdeBandeja()
     if (m_pausaPorDispositivo)
         return;
     if (m_copiando && !m_activas.isEmpty()) {
-        m_pausada = !m_pausada;
-        establecerPausaDeMotores(m_pausada);
-        m_panel->mostrarPausado(m_pausada);
+        // La decisión se toma una sola vez y se envía como estado absoluto a
+        // todos los motores. Con varios archivos, alternar cada motor a partir
+        // de su estado observado podía dejar uno de ellos en pausa mientras
+        // los demás reanudaban.
+        const bool pausada = !m_pausada;
+        m_pausada = pausada;
+        establecerPausaDeMotores(pausada);
+        m_pausada = pausada;
+        m_panel->mostrarPausado(pausada);
         // La pausa no termina ninguna fila: conservar el último progreso y
         // repintarlo evita que la barra segmentada parezca una lista vacía
         // mientras los motores esperan en su hilo.
         mostrarArchivosEnCurso();
         refrescarTotal();
-        anotarSesion(m_pausada ? tr("Transferencia pausada") : tr("Transferencia reanudada"));
-        if (!m_pausada)
+        anotarSesion(pausada ? tr("Transferencia pausada") : tr("Transferencia reanudada"));
+        if (!pausada)
             rellenarMotores();
         emit estadoDeBandejaCambiado();
     } else if (m_escaner && m_escaneando) {
         // El hilo del escáner está ocupado dentro de `escanear()`, por lo que
         // una llamada encolada no se ejecutaría hasta terminar. El método solo
         // toca una bandera atómica y es seguro invocarlo directamente.
-        m_escaner->alternarPausa();
-        anotarSesion(tr("Enumeración pausada/reanudada"));
+        const bool pausada = !m_pausada;
+        m_pausada = pausada;
+        m_escaner->establecerPausa(pausada);
+        m_panel->mostrarPausado(pausada);
+        anotarSesion(pausada ? tr("Enumeración pausada") : tr("Enumeración reanudada"));
     }
 }
 
@@ -292,10 +301,9 @@ void VentanaPrincipal::establecerPausaDeMotores(bool pausada)
     for (const CopiaActiva &activa : std::as_const(m_activas)) {
         if (!activa.motor)
             continue;
-        // No alternar a ciegas: una pausa automática o una petición recibida
-        // justo antes puede haber dejado un motor en el estado deseado ya.
-        if (activa.motor->pausada() != pausada)
-            activa.motor->alternarPausa();
+        // Fijar el estado es idempotente: una pausa automática o una petición
+        // recibida justo antes no puede invertir accidentalmente este objetivo.
+        activa.motor->establecerPausa(pausada);
     }
 }
 
@@ -359,7 +367,7 @@ void VentanaPrincipal::pausarPorDispositivo()
     m_pausadosPorDispositivo.clear();
     for (MotorDeCopia *motor : m_motores) {
         if (estaActivo(motor) && !motor->pausada()) {
-            motor->alternarPausa();
+            motor->establecerPausa(true);
             m_pausadosPorDispositivo.append(motor);
         }
     }
@@ -381,7 +389,7 @@ void VentanaPrincipal::reanudarPorDispositivo()
 
     for (MotorDeCopia *motor : std::as_const(m_pausadosPorDispositivo)) {
         if (motor->pausada())
-            motor->alternarPausa();
+            motor->establecerPausa(false);
     }
     m_pausadosPorDispositivo.clear();
 
@@ -1652,10 +1660,19 @@ void VentanaPrincipal::alPausaMotorCambiada(MotorDeCopia *motor, bool pausada)
     // los motores activos han confirmado ese estado. Esto evita que un primer
     // motor que responda antes haga desaparecer o reordene las barras de los
     // demás.
-    const bool todosPausados = std::all_of(m_activas.cbegin(), m_activas.cend(),
-        [](const CopiaActiva &activa) {
-            return activa.motor != nullptr && activa.motor->pausada();
-        });
+    bool todosPausados = true;
+    bool todosReanudados = true;
+    for (const CopiaActiva &activa : std::as_const(m_activas)) {
+        if (!activa.motor)
+            continue;
+        todosPausados = todosPausados && activa.motor->pausada();
+        todosReanudados = todosReanudados && !activa.motor->pausada();
+    }
+    // Mientras se propaga una petición a varios hilos hay un estado mixto.
+    // Mantener la intención mostrada por la UI durante esa ventana evita que
+    // una señal intermedia vuelva a cambiar «Reanudar» por «Pausar».
+    if (!todosPausados && !todosReanudados)
+        return;
     m_pausada = todosPausados;
     m_panel->mostrarPausado(m_pausada);
     mostrarArchivosEnCurso();

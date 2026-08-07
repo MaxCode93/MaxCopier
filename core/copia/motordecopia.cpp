@@ -303,11 +303,16 @@ void MotorDeCopia::reiniciar()
     m_cancelar.storeRelaxed(0);
 }
 
+void MotorDeCopia::establecerPausa(bool pausada)
+{
+    const int valor = pausada ? 1 : 0;
+    if (m_pausa.fetchAndStoreRelaxed(valor) != valor)
+        emit pausaCambiada(pausada);
+}
+
 void MotorDeCopia::alternarPausa()
 {
-    const bool pausar = m_pausa.loadRelaxed() == 0;
-    m_pausa.storeRelaxed(pausar ? 1 : 0);
-    emit pausaCambiada(pausar);
+    establecerPausa(!pausada());
 }
 
 void MotorDeCopia::saltar()
