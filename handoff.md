@@ -1384,3 +1384,30 @@ Toolchain local instalado para validar la fase: Qt 6.4.2 de Ubuntu, Ninja 1.11.1
 `core/copia/backendwin32.cpp` y `core/copia/motordecopia.cpp` con warnings habilitados, incluyendo
 el camino `Q_OS_WIN`. No se enlazó el ejecutable Windows completo ni se ejecutó overlapped en
 Windows porque el entorno no tiene una distribución Qt MinGW para Windows ni un host Windows.
+
+### Sesión 43 — 2026-08-07 · cancelación y destrucción cooperativas
+
+Se implementa la prioridad 2 del plan de estabilización: ninguna ventana, dependencia compartida
+ni `QThread` se libera mientras un motor o el escáner siga dentro de una operación.
+
+1. `VentanaPrincipal::cerrarDefinitivamente` cancela mediante las banderas atómicas, solicita la
+   salida de los event loops y solo llama a `deleteLater()` después de recibir `finished` de todos
+   los hilos. El cierre desde la X ya no acepta una destrucción automática de Qt durante una copia;
+   `WA_DeleteOnClose` se elimina del gestor y la ventana se oculta mientras termina el drenaje.
+2. El destructor queda como defensa final: cancela, pide `quit()`, espera sin límite a los hilos y
+   libera el `LimitadorVelocidad` únicamente después de que no quede ningún trabajador vivo. Los
+   punteros a motores/escáner se retiran al terminar cada hilo para que un destructor diferido no
+   vuelva a invocar un `QObject` liberado. También se elimina el `quit()` forzado a los 10 segundos
+   del gestor, que podía terminar el proceso con hilos todavía activos.
+3. La cancelación normal espera a que terminen todos los motores, el escáner y una comprobación de
+   espacio pendiente. Después limpia `m_copiando`, `m_escaneando`, `m_cancelandoTrabajo` y las
+   anclas de filas activas. Esto corrige la fila fantasma que `ListaDeCopia::vaciar()` conservaba y
+   que dejaba la ventana ocupada para siempre; la misma ventana puede iniciar otra tanda.
+4. `pruebainterfaz` añade regresiones para cancelar una copia pausada y reutilizar la ventana, y
+   para cerrar una ventana mientras un motor está copiando, verificando la destrucción solo después
+   de la finalización real de los hilos.
+
+Validación local de la sesión: compilación Linux completa con CMake/Ninja y `ctest` verde (4/4),
+incluyendo las regresiones de cancelación y cierre; `git diff --check` también pasa. La prueba
+cruzada de los hilos Qt y el cierre visual en el kit Qt 6.11/MinGW siguen requiriendo el host
+Windows del usuario.

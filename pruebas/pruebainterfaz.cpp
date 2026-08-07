@@ -43,11 +43,21 @@ bool esperar(QApplication &aplicacion, const std::function<bool()> &condicion, i
     return condicion();
 }
 
-bool crearArchivo(const QString &ruta, char relleno)
+bool crearArchivo(const QString &ruta, char relleno, qint64 bytes = 1024 * 1024)
 {
     QFile archivo(ruta);
-    return archivo.open(QIODevice::WriteOnly)
-        && archivo.write(QByteArray(1024 * 1024, relleno)) == 1024 * 1024;
+    if (!archivo.open(QIODevice::WriteOnly))
+        return false;
+    const QByteArray bloque(1024 * 1024, relleno);
+    qint64 escritos = 0;
+    while (escritos < bytes) {
+        const qint64 parte = qMin<qint64>(bloque.size(), bytes - escritos);
+        const qint64 resultado = archivo.write(bloque.constData(), parte);
+        if (resultado != parte)
+            return false;
+        escritos += resultado;
+    }
+    return true;
 }
 
 } // namespace
@@ -154,6 +164,61 @@ int main(int argc, char **argv)
         "reanudar una copia activa vuelve a activar los motores");
     comprobar(esperar(aplicacion, [&] { return !ventana.ocupada(); }, 12000),
         "la copia reanudada termina sin dejar la ventana bloqueada");
+
+    Configuracion configuracionLenta(temporal.filePath(QStringLiteral("config-lenta.mc")));
+    configuracionLenta.establecerComprobarEspacioLibre(false);
+    configuracionLenta.establecerArchivosALaVez(1);
+    // Configuracion normaliza el límite a MiB/s; 1 MiB/s mantiene estos
+    // archivos activos el tiempo suficiente para ejercitar la cancelación y
+    // el cierre sin hacer lenta la prueba una vez cancelados.
+    configuracionLenta.establecerLimiteVelocidad(1 * 1024 * 1024);
+
+    const QString origenCancelacion = temporal.filePath(QStringLiteral("origen-cancelacion.bin"));
+    const QString destinoCancelacion = temporal.filePath(QStringLiteral("destino-cancelacion"));
+    comprobar(crearArchivo(origenCancelacion, 'c', 32 * 1024 * 1024),
+        "se prepara un archivo grande para cancelar");
+    comprobar(QDir().mkpath(destinoCancelacion), "se crea el destino de la cancelación");
+
+    VentanaPrincipal ventanaCancelacion(ipc::Operacion::Copiar, &configuracionLenta);
+    ventanaCancelacion.show();
+    ventanaCancelacion.iniciarCopia(ipc::Operacion::Copiar, { origenCancelacion }, destinoCancelacion);
+    comprobar(esperar(aplicacion, [&] { return ventanaCancelacion.copiando(); }, 5000),
+        "la transferencia cancelable llega a un motor activo");
+    ventanaCancelacion.pausarDesdeBandeja();
+    comprobar(esperar(aplicacion, [&] { return ventanaCancelacion.pausada(); }, 2000),
+        "la transferencia cancelable puede pausarse antes de cancelar");
+    ventanaCancelacion.cancelarDesdeBandeja();
+    comprobar(esperar(aplicacion, [&] {
+        return !ventanaCancelacion.ocupada() && !ventanaCancelacion.cancelando();
+    }, 8000), "cancelar espera al motor y libera el estado de la ventana");
+
+    const QString origenTrasCancelar = temporal.filePath(QStringLiteral("origen-tras-cancelar.bin"));
+    comprobar(crearArchivo(origenTrasCancelar, 'r'), "se prepara una segunda copia tras cancelar");
+    ventanaCancelacion.iniciarCopia(
+        ipc::Operacion::Copiar, { origenTrasCancelar }, destinoCancelacion);
+    comprobar(esperar(aplicacion, [&] { return !ventanaCancelacion.ocupada(); }, 8000),
+        "la ventana puede iniciar otra copia después de cancelar");
+    comprobar(QFileInfo::exists(QDir(destinoCancelacion).filePath(
+                    QFileInfo(origenTrasCancelar).fileName())),
+        "la segunda copia posterior a la cancelación llega al destino");
+
+    const QString origenCierre = temporal.filePath(QStringLiteral("origen-cierre.bin"));
+    const QString destinoCierre = temporal.filePath(QStringLiteral("destino-cierre"));
+    comprobar(crearArchivo(origenCierre, 'x', 32 * 1024 * 1024),
+        "se prepara un archivo grande para cerrar durante la copia");
+    comprobar(QDir().mkpath(destinoCierre), "se crea el destino del cierre");
+
+    auto *ventanaCierre = new VentanaPrincipal(ipc::Operacion::Copiar, &configuracionLenta);
+    bool destruida = false;
+    QObject::connect(ventanaCierre, &QObject::destroyed, &aplicacion,
+        [&destruida] { destruida = true; });
+    ventanaCierre->show();
+    ventanaCierre->iniciarCopia(ipc::Operacion::Copiar, { origenCierre }, destinoCierre);
+    comprobar(esperar(aplicacion, [&] { return ventanaCierre->copiando(); }, 5000),
+        "la ventana llega a copiar antes de solicitar el cierre");
+    ventanaCierre->close();
+    comprobar(esperar(aplicacion, [&] { return destruida; }, 10000),
+        "cerrar durante una copia espera a que terminen los hilos antes de destruir la ventana");
 
     std::printf(fallos == 0 ? "\nTodo bien.\n" : "\n%d comprobaciones falladas.\n", fallos);
     return fallos == 0 ? 0 : 1;

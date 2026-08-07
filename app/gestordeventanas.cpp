@@ -11,7 +11,6 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
-#include <QTimer>
 
 #include <utility>
 
@@ -90,7 +89,6 @@ void GestorDeVentanas::mostrarOpciones()
 VentanaPrincipal *GestorDeVentanas::crearVentana(Operacion operacion)
 {
     auto *ventana = new VentanaPrincipal(operacion, m_configuracion);
-    ventana->setAttribute(Qt::WA_DeleteOnClose);
     connect(ventana, &VentanaPrincipal::peticionDeCopia, this,
         [this](Operacion pedido, const QStringList &origenes, const QString &carpetaDestino) {
             atender(pedido, origenes, carpetaDestino, false);
@@ -174,9 +172,9 @@ void GestorDeVentanas::salir()
         m_dialogoOpciones->close();
 
     // La salida no depende de QWidget::close(): una copia que ya está
-    // escondida en su icono propio cancela explícitamente y programa su
-    // destrucción. El proceso solo termina cuando la última emite
-    // `destroyed` y sus hilos han quedado detenidos.
+    // escondida en su icono propio cancela explícitamente y solicita su
+    // destrucción cuando sus hilos han quedado detenidos. El proceso solo
+    // termina cuando la última emite `destroyed`.
     const QList<QPointer<VentanaPrincipal>> ventanas = m_ventanas;
     for (const QPointer<VentanaPrincipal> &ventana : ventanas) {
         if (ventana)
@@ -184,12 +182,6 @@ void GestorDeVentanas::salir()
     }
     if (m_ventanas.isEmpty())
         QCoreApplication::quit();
-    else {
-        // Red de seguridad: si alguna ventana no llega a destruirse (hilo
-        // atascado en E/S), el proceso no puede quedarse vivo en segundo
-        // plano; el sistema operativo limpia lo que falte.
-        QTimer::singleShot(10000, qApp, &QCoreApplication::quit);
-    }
 }
 
 void GestorDeVentanas::ejecutarAccionFinal(VentanaPrincipal *ventana, AccionAlTerminar accion)

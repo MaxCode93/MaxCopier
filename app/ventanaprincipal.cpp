@@ -208,22 +208,36 @@ VentanaPrincipal::VentanaPrincipal(ipc::Operacion operacion, Configuracion *conf
 
 VentanaPrincipal::~VentanaPrincipal()
 {
+    // La destrucción normal solo se programa después de que todos los hilos
+    // hayan terminado. Este drenaje defensivo también cubre una destrucción
+    // directa desde un llamador externo: el limitador no se libera mientras un
+    // motor pueda seguir usándolo.
     cancelarTrabajo();
     for (QThread *hilo : m_hilos) {
-        hilo->quit();
-        // Nunca colgar la salida: si un motor se atasca (p. ej. una E/S a un
-        // dispositivo que desapareció), el proceso termina igualmente y el
-        // sistema limpia el hilo. El `destroyed` se emite de todas formas.
-        hilo->wait(3000);
+        if (hilo)
+            hilo->quit();
     }
-    m_hiloEscaner->quit();
-    m_hiloEscaner->wait(3000);
+    if (m_hiloEscaner)
+        m_hiloEscaner->quit();
+    for (QThread *hilo : m_hilos) {
+        if (hilo)
+            hilo->wait();
+    }
+    if (m_hiloEscaner)
+        m_hiloEscaner->wait();
     delete m_limitador;
 }
 
 void VentanaPrincipal::closeEvent(QCloseEvent *evento)
 {
-    cancelarTrabajo();
+    if (!m_cierreDefinitivo) {
+        // `WA_DeleteOnClose` no debe poder destruir la ventana mientras un
+        // motor está dentro de `copiar()`. La destrucción se solicita después
+        // de cancelar y esperar las señales `finished` de todos los hilos.
+        evento->ignore();
+        cerrarDefinitivamente();
+        return;
+    }
     evento->accept();
 }
 
@@ -233,7 +247,17 @@ void VentanaPrincipal::cancelarTrabajo()
     if (m_escaner)
         m_escaner->cancelar();
     for (MotorDeCopia *motor : m_motores)
-        motor->cancelar();
+        if (motor)
+            motor->cancelar();
+    comprobarCancelacion();
+}
+
+void VentanaPrincipal::comprobarCancelacion()
+{
+    if (m_cierreDefinitivo || !m_cancelandoTrabajo || m_escaneando
+        || m_comprobandoEspacio || !m_activas.isEmpty())
+        return;
+    mostrarTransferenciaCancelada();
 }
 
 void VentanaPrincipal::pausarDesdeBandeja()
@@ -568,13 +592,47 @@ void VentanaPrincipal::cerrarDefinitivamente()
         return;
 
     // La copia suele estar escondida cuando esta ruta viene del menú de la
-    // bandeja. No dependemos de QWidget::close() +
-    // WA_DeleteOnClose en ese caso: cancelamos explícitamente, la escondemos y
-    // programamos su destrucción. Así el gestor recibe siempre `destroyed` y
-    // puede terminar el proceso cuando ya no quedan ventanas.
+    // bandeja. Se cancela explícitamente y se oculta, pero la destrucción queda
+    // pendiente hasta que todos los motores y el escáner hayan abandonado sus
+    // slots bloqueantes. Así el limitador y la ventana no pueden desaparecer
+    // debajo de una E/S todavía activa.
     m_cierreDefinitivo = true;
     cancelarTrabajo();
+    m_activas.clear();
+    m_relojEstado->stop();
+    m_relojDispositivo->stop();
+    if (m_cargando)
+        m_cargando->hide();
     hide();
+    solicitarParadaDeHilos();
+    comprobarCierreSeguro();
+}
+
+void VentanaPrincipal::solicitarParadaDeHilos()
+{
+    // `quit()` no interrumpe un slot que ya está ejecutándose, pero deja la
+    // petición preparada: cuando `copiar()`/`escanear()` devuelva tras observar
+    // la bandera atómica de cancelación, el event loop del hilo termina.
+    for (QThread *hilo : m_hilos) {
+        if (hilo)
+            hilo->quit();
+    }
+    if (m_hiloEscaner)
+        m_hiloEscaner->quit();
+}
+
+void VentanaPrincipal::comprobarCierreSeguro()
+{
+    if (!m_cierreDefinitivo || m_destruccionProgramada)
+        return;
+    for (QThread *hilo : m_hilos) {
+        if (hilo && hilo->isRunning())
+            return;
+    }
+    if (m_hiloEscaner && m_hiloEscaner->isRunning())
+        return;
+
+    m_destruccionProgramada = true;
     deleteLater();
 }
 
@@ -665,6 +723,13 @@ void VentanaPrincipal::arrancarHilos()
             motor->establecerMetodo(m_configuracion->metodoDeCopia());
         motor->establecerLimitadorCompartido(m_limitador);
         connect(hilo, &QThread::finished, motor, &QObject::deleteLater);
+        connect(hilo, &QThread::finished, this, [this, motor] {
+            // El motor se destruye al terminar su hilo. Quitar el puntero antes
+            // de que pueda volver a entrar el destructor evita cancelar un
+            // QObject ya liberado durante el cierre diferido.
+            m_motores.removeAll(motor);
+            comprobarCierreSeguro();
+        });
         connect(motor, &MotorDeCopia::iniciada, this,
             [this, motor](const QString &origen, const QString &destino, qint64 tamano) {
                 alIniciada(motor, origen, destino, tamano);
@@ -688,6 +753,13 @@ void VentanaPrincipal::arrancarHilos()
     m_escaner = new Escaner;
     m_escaner->moveToThread(m_hiloEscaner);
     connect(m_hiloEscaner, &QThread::finished, m_escaner, &QObject::deleteLater);
+    connect(m_hiloEscaner, &QThread::finished, this, [this] {
+        // Las señales de finalización del escáner pueden estar encoladas en la
+        // UI cuando el hilo ya acabó. El objeto no debe volver a usarse desde
+        // esos caminos ni desde el destructor.
+        m_escaner = nullptr;
+        comprobarCierreSeguro();
+    });
 
     connect(this, &VentanaPrincipal::escaneoPedido, m_escaner, &Escaner::escanear);
     connect(this, &VentanaPrincipal::comprobacionEspacioPedida, m_escaner,
@@ -1051,13 +1123,17 @@ void VentanaPrincipal::alEscaneoTerminado(int archivos, qint64 bytes, bool cance
 {
     Q_UNUSED(bytes);
     m_escaneando = false;
+    if (m_cierreDefinitivo) {
+        m_comprobandoEspacio = false;
+        comprobarCierreSeguro();
+        return;
+    }
     if (!m_copiando)
         m_panel->habilitarControles(false);
     if (m_cancelandoTrabajo) {
         m_movimientoCompleto = false;
         m_lista->vaciar();
-        if (!m_copiando)
-            mostrarTransferenciaCancelada();
+        comprobarCancelacion();
         return;
     }
     if (cancelado)
@@ -1081,6 +1157,13 @@ void VentanaPrincipal::alEscaneoTerminado(int archivos, qint64 bytes, bool cance
 void VentanaPrincipal::alEspacioComprobado(
     const QList<FaltaDeEspacio> &faltas, quint64 generacion)
 {
+    if (m_cierreDefinitivo)
+        return;
+    if (m_cancelandoTrabajo) {
+        m_comprobandoEspacio = false;
+        comprobarCancelacion();
+        return;
+    }
     // Si mientras se preparaba el espacio llegó otra petición de enumeración,
     // el resultado anterior ya no describe la cola actual. El worker procesará
     // la petición más reciente y solo ese resultado puede arrancar motores.
@@ -1590,11 +1673,15 @@ void VentanaPrincipal::alTerminada(
     const int fila = filaDe(terminado.fuente);
     quitarActiva(motor);
 
+    if (m_cierreDefinitivo)
+        return;
+
     if (m_cancelandoTrabajo) {
-        // Cancelación en curso: el primero que llegó mostró el estado; aquí
-        // solo se retira la entrada del motor que acaba de parar.
-        if (m_activas.isEmpty())
-            refrescarEstado();
+        // La cancelación solo publica el estado cuando todos los motores y el
+        // escáner han abandonado sus operaciones. Así no se puede iniciar una
+        // tanda nueva con un motor todavía ejecutando la anterior.
+        comprobarCancelacion();
+        refrescarEstado();
         return;
     }
 
@@ -1713,8 +1800,16 @@ void VentanaPrincipal::mostrarTransferenciaCancelada()
     m_comprobandoEspacio = false;
     m_pausaPorDispositivo = false;
     m_pausadosPorDispositivo.clear();
+    // `ListaDeCopia::vaciar()` conserva las filas activas por diseño. En una
+    // cancelación ya no queda ningún motor asociado, así que primero se quitan
+    // esas anclas para no dejar una fila fantasma que mantenga la ventana
+    // ocupada para siempre.
+    m_lista->desmarcarTodas();
     m_lista->vaciar();
     m_copiando = false;
+    m_escaneando = false;
+    m_cancelandoTrabajo = false;
+    m_asignando = false;
     m_colision = AccionColision::Preguntar;
     m_error = AccionError::Preguntar;
     m_accionFinalTanda = AccionAlTerminar::Nada;
