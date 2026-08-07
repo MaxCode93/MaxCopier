@@ -1,0 +1,9 @@
+---
+Language: Cpp
+BasedOnStyle: WebKit
+ColumnLimit: 110
+IndentWidth: 4
+PointerAlignment: Right
+AllowShortFunctionsOnASingleLine: Inline
+BreakBeforeBraces: WebKit
+SortIncludes: false

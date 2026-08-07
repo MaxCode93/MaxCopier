@@ -1,0 +1,16 @@
+<RCC>
+    <qresource prefix="/temas">
+        <file alias="oscuro.qss">temas/oscuro.qss</file>
+        <file alias="claro.qss">temas/claro.qss</file>
+    </qresource>
+    <qresource prefix="/iconos">
+        <file alias="maxcopier-16.png">recursos/iconos/maxcopier-16.png</file>
+        <file alias="maxcopier-20.png">recursos/iconos/maxcopier-20.png</file>
+        <file alias="maxcopier-24.png">recursos/iconos/maxcopier-24.png</file>
+        <file alias="maxcopier-32.png">recursos/iconos/maxcopier-32.png</file>
+        <file alias="maxcopier-48.png">recursos/iconos/maxcopier-48.png</file>
+        <file alias="maxcopier-64.png">recursos/iconos/maxcopier-64.png</file>
+        <file alias="maxcopier-128.png">recursos/iconos/maxcopier-128.png</file>
+        <file alias="maxcopier-256.png">recursos/iconos/maxcopier-256.png</file>
+    </qresource>
+</RCC>

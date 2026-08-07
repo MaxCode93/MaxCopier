@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style>
+/* Mockup MaxCopier — estilo "clásico SuperCopier 2", temas oscuro y claro */
+*{box-sizing:border-box;font-family:"Segoe UI",Tahoma,Arial,sans-serif}
+body{margin:0;background:#0d0d0f;padding:26px;display:flex;flex-direction:column;gap:30px;align-items:center}
+
+.win{width:700px;border-radius:6px;overflow:hidden;box-shadow:0 12px 34px rgba(0,0,0,.55);border:1px solid rgba(0,0,0,.6)}
+
+/* ---------- tema oscuro ---------- */
+.dark{
+  --acc:#1b9bf0; --acc2:#0e7ec9; --frame:#14161a; --bg:#1c1f24; --bg2:#23272d;
+  --txt:#e9ecf1; --dim:#98a0ab; --bar:#12141a; --barln:#31363d; --heart:#4bb7ff;
+}
+/* ---------- tema claro ---------- */
+.light{
+  --acc:#1e9bf0; --acc2:#127fc9; --frame:#e9edf2; --bg:#f7f9fc; --bg2:#eef2f7;
+  --txt:#1a1d21; --dim:#5d6672; --bar:#e6ecf3; --barln:#c2ccd8; --heart:#1b9bf0;
+}
+
+.win{background:var(--bg);color:var(--txt)}
+.tb{height:26px;background:var(--acc);display:flex;align-items:center;gap:7px;padding:0 6px;color:#fff;font-size:12px}
+.light .tb{background:linear-gradient(#31a9f5,#1e9bf0)}
+.mark{width:17px;height:17px;border-radius:3px;background:#fff;color:var(--acc2);font-size:10px;font-weight:800;display:grid;place-items:center;letter-spacing:-1px}
+.tb b{font-weight:600}
+.sp{flex:1}
+.wb{width:22px;height:20px;display:grid;place-items:center;font-size:11px;opacity:.95}
+.wb:hover{background:rgba(255,255,255,.18)}
+
+.body{padding:7px 10px 4px}
+.paths{font-size:12.5px;line-height:1.35;margin-bottom:5px}
+.paths span{color:var(--dim)}
+
+.line{position:relative;height:22px;margin-bottom:3px}
+.line .track{position:absolute;inset:0;background:var(--bar);border:1px solid var(--barln);border-radius:3px;overflow:hidden}
+.line .fill{height:100%;background:linear-gradient(var(--acc),var(--acc2))}
+.light .line .fill{background:linear-gradient(#a9dcfb,#7cc7f5)}
+.line .txt{position:absolute;inset:0;display:flex;align-items:center;padding:0 8px;font-size:12.5px;gap:6px}
+.line .mid{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.light .line .mid{text-shadow:none}
+.line .right{position:absolute;right:8px;top:0;bottom:0;display:flex;align-items:center;font-size:12.5px;color:var(--dim)}
+.gap{height:9px}
+
+.side{position:absolute;right:0;top:0;width:190px;text-align:right;font-size:12.5px;color:var(--dim)}
+
+.foot{display:flex;align-items:center;gap:0;padding:3px 10px 8px}
+.ic{width:44px;height:26px;display:grid;place-items:center;color:var(--acc);font-size:15px;border-radius:4px}
+.ic:hover{background:var(--bg2)}
+.ic.sm{font-size:13px}
+.drive{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--barln);border-radius:4px;padding:2px 8px 2px 4px;font-size:12px}
+.hd{background:var(--acc);color:#fff;font-size:9.5px;font-weight:700;padding:1px 4px;border-radius:3px}
+
+.cap{color:#7d848f;font-size:12px;margin-top:-18px}
+
+/* --- vista expandida --- */
+.tabs{display:flex;gap:1px;padding:6px 10px 0;font-size:12px}
+.tab{padding:5px 11px;color:var(--dim);border:1px solid transparent;border-bottom:none;border-radius:4px 4px 0 0}
+.tab.on{color:var(--txt);background:var(--bg2);border-color:var(--barln)}
+table{width:100%;border-collapse:collapse;font-size:12px;background:var(--bg2);border-top:1px solid var(--barln)}
+th{text-align:left;font-weight:500;color:var(--dim);padding:5px 9px;font-size:11.5px;border-bottom:1px solid var(--barln)}
+td{padding:4px 9px;border-bottom:1px solid var(--barln);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+tr.sel td{background:rgba(27,155,240,.18)}
+.tag{font-size:10.5px;padding:1px 6px;border-radius:9px;border:1px solid var(--barln);color:var(--dim)}
+.tag.ok{color:#3ec46d;border-color:#3ec46d}
+.tag.run{color:var(--acc);border-color:var(--acc)}
+.tag.err{color:#e05252;border-color:#e05252}
+.tag.warn{color:#d69b1c;border-color:#d69b1c}
+.mono{font-family:Consolas,monospace;font-size:11px;color:var(--dim)}
+.statusbar{display:flex;align-items:center;gap:14px;font-size:11.5px;color:var(--dim);padding:5px 10px;border-top:1px solid var(--barln)}
+</style>
+</head>
+<body>
+
+<!-- ============ COMPACTA · OSCURO ============ -->
+<div class="win dark">
+  <div class="tb"><div class="mark">MC</div><b>6 % — Copia desde D:\Install\Windows\ hacia D:\</b><div class="sp"></div>
+    <div class="wb">&#8600;</div><div class="wb">&#8212;</div><div class="wb">&#9633;</div><div class="wb">&#10005;</div></div>
+  <div class="body">
+    <div class="paths">Desde: <span>D:\Install\Windows\</span><br>Hacia: <span>D:\</span></div>
+
+    <div class="line">
+      <div class="track"><div class="fill" style="width:6%"></div></div>
+      <div class="txt">Fichero 1/1 · 1,25 GB de 19,42 GB</div>
+      <div class="mid">6 %</div>
+      <div class="right">79.388,72 KB/s</div>
+    </div>
+
+    <div class="line">
+      <div class="track"><div class="fill" style="width:6%"></div></div>
+      <div class="txt">Archivo de Prueba.iso · 19,42 GB</div>
+      <div class="mid">6 % — 00:03:59 restante</div>
+      <div class="right">00:03:59</div>
+    </div>
+
+    <div class="foot">
+      <div class="ic" title="Favoritos / destinos">&#9825;</div>
+      <div class="ic" title="Pausar">&#10073;&#10073;</div>
+      <div class="ic" title="Saltar archivo">&#9197;</div>
+      <div class="ic sm" title="Límite de velocidad">&#8646;</div>
+      <div class="ic sm" title="Verificar (hash)">&#10003;</div>
+      <div class="ic sm" title="Cancelar">&#10005;</div>
+      <div class="sp"></div>
+      <div class="drive"><span class="hd">HD</span>[D:] Datos · 412 GB libres</div>
+    </div>
+  </div>
+</div>
+<div class="cap">Ventana compacta — tema oscuro (700×~170 px, igual proporción que SuperCopier 2)</div>
+
+<!-- ============ COMPACTA · CLARO ============ -->
+<div class="win light">
+  <div class="tb"><div class="mark">MC</div><b>6 % — Copia desde D:\Install\Windows\ hacia D:\</b><div class="sp"></div>
+    <div class="wb">&#8600;</div><div class="wb">&#8212;</div><div class="wb">&#9633;</div><div class="wb">&#10005;</div></div>
+  <div class="body">
+    <div class="paths">Desde: <span>D:\Install\Windows\</span><br>Hacia: <span>D:\</span></div>
+
+    <div class="line">
+      <div class="track"><div class="fill" style="width:6%"></div></div>
+      <div class="txt">Fichero 1/1 · 1,25 GB de 19,42 GB</div>
+      <div class="mid">6 %</div>
+      <div class="right">79.388,72 KB/s</div>
+    </div>
+
+    <div class="line">
+      <div class="track"><div class="fill" style="width:6%"></div></div>
+      <div class="txt">Archivo de Prueba.iso · 19,42 GB</div>
+      <div class="mid">6 % — 00:03:59 restante</div>
+      <div class="right">00:03:59</div>
+    </div>
+
+    <div class="foot">
+      <div class="ic" title="Favoritos / destinos">&#9825;</div>
+      <div class="ic" title="Pausar">&#10073;&#10073;</div>
+      <div class="ic" title="Saltar archivo">&#9197;</div>
+      <div class="ic sm" title="Límite de velocidad">&#8646;</div>
+      <div class="ic sm" title="Verificar (hash)">&#10003;</div>
+      <div class="ic sm" title="Cancelar">&#10005;</div>
+      <div class="sp"></div>
+      <div class="drive"><span class="hd">HD</span>[D:] Datos · 412 GB libres</div>
+    </div>
+  </div>
+</div>
+<div class="cap">Ventana compacta — tema claro</div>
+
+<!-- ============ EXPANDIDA · OSCURO ============ -->
+<div class="win dark" style="width:700px">
+  <div class="tb"><div class="mark">MC</div><b>63 % — 5 trabajos · 212 MB/s</b><div class="sp"></div>
+    <div class="wb">&#8600;</div><div class="wb">&#8212;</div><div class="wb">&#9633;</div><div class="wb">&#10005;</div></div>
+  <div class="body" style="padding-bottom:0">
+    <div class="paths">Desde: <span>D:\Fotos\2024\</span><br>Hacia: <span>E:\Backup\Fotos\2024\</span></div>
+    <div class="line">
+      <div class="track"><div class="fill" style="width:63%"></div></div>
+      <div class="txt">Fichero 1.842/3.190 · 12,4 GB de 19,7 GB</div>
+      <div class="mid">63 %</div>
+      <div class="right">212 MB/s</div>
+    </div>
+    <div class="line">
+      <div class="track"><div class="fill" style="width:78%"></div></div>
+      <div class="txt">IMG_20240712_183245.CR3 · 41,2 MB</div>
+      <div class="mid">78 % — 00:04:12 restante</div>
+      <div class="right">00:04:12</div>
+    </div>
+    <div class="foot">
+      <div class="ic">&#9825;</div><div class="ic">&#10073;&#10073;</div><div class="ic">&#9197;</div>
+      <div class="ic sm">&#8646;</div><div class="ic sm">&#10003;</div><div class="ic sm">&#10005;</div>
+      <div class="sp"></div>
+      <div class="drive"><span class="hd">SSD</span>[E:] Backup · 1,2 TB libres</div>
+    </div>
+  </div>
+  <div class="tabs">
+    <div class="tab on">Lista de copia</div><div class="tab">Trabajos (5)</div>
+    <div class="tab">Errores (2)</div><div class="tab">Colisiones (5)</div><div class="tab">Registro</div>
+  </div>
+  <table>
+    <tr><th style="width:22px"></th><th>Archivo</th><th style="width:70px">Tamaño</th><th style="width:96px">Estado</th><th style="width:46px">%</th><th style="width:120px">Hash origen</th><th style="width:120px">Hash destino</th></tr>
+    <tr><td>&#10003;&#10003;</td><td>IMG_20240712_183240.CR3</td><td>39,8 MB</td><td><span class="tag ok">Verificado</span></td><td>100</td><td class="mono">9f13a4c7…</td><td class="mono">9f13a4c7…</td></tr>
+    <tr class="sel"><td>&#9656;</td><td>IMG_20240712_183245.CR3</td><td>41,2 MB</td><td><span class="tag run">Copiando</span></td><td>78</td><td class="mono">…calc</td><td class="mono">—</td></tr>
+    <tr><td>&#9888;</td><td>video_boda.mp4</td><td>4,1 GB</td><td><span class="tag warn">Colisión</span></td><td>—</td><td class="mono">—</td><td class="mono">—</td></tr>
+    <tr><td>&#10007;</td><td>raw\_thumbs.db</td><td>112 KB</td><td><span class="tag err">Bloqueado</span></td><td>0</td><td class="mono">—</td><td class="mono">—</td></tr>
+    <tr><td>&#9203;</td><td>raw\IMG_20240712_183251.CR3</td><td>40,7 MB</td><td><span class="tag">En cola</span></td><td>—</td><td class="mono">—</td><td class="mono">—</td></tr>
+  </table>
+  <div class="statusbar"><span>Motor: 4 hilos · sin búfer &gt;16 MB</span><span>Verificar: xxHash3</span><span>Límite: 40 MB/s</span><div class="sp"></div><span>Al terminar: nada &#9662;</span></div>
+</div>
+<div class="cap">Vista expandida (misma ventana, botón &#9662;) — tema oscuro</div>
+
+<!-- ============ EXPANDIDA · CLARO ============ -->
+<div class="win light" style="width:700px">
+  <div class="tb"><div class="mark">MC</div><b>63 % — 5 trabajos · 212 MB/s</b><div class="sp"></div>
+    <div class="wb">&#8600;</div><div class="wb">&#8212;</div><div class="wb">&#9633;</div><div class="wb">&#10005;</div></div>
+  <div class="body" style="padding-bottom:0">
+    <div class="paths">Desde: <span>D:\Fotos\2024\</span><br>Hacia: <span>E:\Backup\Fotos\2024\</span></div>
+    <div class="line">
+      <div class="track"><div class="fill" style="width:63%"></div></div>
+      <div class="txt">Fichero 1.842/3.190 · 12,4 GB de 19,7 GB</div>
+      <div class="mid">63 %</div>
+      <div class="right">212 MB/s</div>
+    </div>
+    <div class="line">
+      <div class="track"><div class="fill" style="width:78%"></div></div>
+      <div class="txt">IMG_20240712_183245.CR3 · 41,2 MB</div>
+      <div class="mid">78 % — 00:04:12 restante</div>
+      <div class="right">00:04:12</div>
+    </div>
+    <div class="foot">
+      <div class="ic">&#9825;</div><div class="ic">&#10073;&#10073;</div><div class="ic">&#9197;</div>
+      <div class="ic sm">&#8646;</div><div class="ic sm">&#10003;</div><div class="ic sm">&#10005;</div>
+      <div class="sp"></div>
+      <div class="drive"><span class="hd">SSD</span>[E:] Backup · 1,2 TB libres</div>
+    </div>
+  </div>
+  <div class="tabs">
+    <div class="tab on">Lista de copia</div><div class="tab">Trabajos (5)</div>
+    <div class="tab">Errores (2)</div><div class="tab">Colisiones (5)</div><div class="tab">Registro</div>
+  </div>
+  <table>
+    <tr><th style="width:22px"></th><th>Archivo</th><th style="width:70px">Tamaño</th><th style="width:96px">Estado</th><th style="width:46px">%</th><th style="width:120px">Hash origen</th><th style="width:120px">Hash destino</th></tr>
+    <tr><td>&#10003;&#10003;</td><td>IMG_20240712_183240.CR3</td><td>39,8 MB</td><td><span class="tag ok">Verificado</span></td><td>100</td><td class="mono">9f13a4c7…</td><td class="mono">9f13a4c7…</td></tr>
+    <tr class="sel"><td>&#9656;</td><td>IMG_20240712_183245.CR3</td><td>41,2 MB</td><td><span class="tag run">Copiando</span></td><td>78</td><td class="mono">…calc</td><td class="mono">—</td></tr>
+    <tr><td>&#9888;</td><td>video_boda.mp4</td><td>4,1 GB</td><td><span class="tag warn">Colisión</span></td><td>—</td><td class="mono">—</td><td class="mono">—</td></tr>
+    <tr><td>&#10007;</td><td>raw\_thumbs.db</td><td>112 KB</td><td><span class="tag err">Bloqueado</span></td><td>0</td><td class="mono">—</td><td class="mono">—</td></tr>
+    <tr><td>&#9203;</td><td>raw\IMG_20240712_183251.CR3</td><td>40,7 MB</td><td><span class="tag">En cola</span></td><td>—</td><td class="mono">—</td><td class="mono">—</td></tr>
+  </table>
+  <div class="statusbar"><span>Motor: 4 hilos · sin búfer &gt;16 MB</span><span>Verificar: xxHash3</span><span>Límite: 40 MB/s</span><div class="sp"></div><span>Al terminar: nada &#9662;</span></div>
+</div>
+<div class="cap">Vista expandida — tema claro</div>
+
+</body>
+</html>

@@ -1,0 +1,24 @@
+1 VERSIONINFO
+FILEVERSION 0,1,0,0
+PRODUCTVERSION 0,1,0,0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Crafted by Maxwell"
+            VALUE "FileDescription", "MaxCopierShell"
+            VALUE "FileVersion", "0.1.0"
+            VALUE "InternalName", "MaxCopierShell"
+            VALUE "OriginalFilename", "MaxCopierShell.dll"
+            VALUE "ProductName", "MaxCopierShell"
+            VALUE "ProductVersion", "0.1.0"
+            VALUE "LegalCopyright", "Copyright 2026"
+            VALUE "Comments", "Crafted by Maxwell"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 0x4B0
+    END
+END

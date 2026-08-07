@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- La misma idea que `icono.svg` pero para 16 y 20 px: solo la hoja de destino
+     y la flecha, más grandes, porque a ese tamaño la hoja de atrás y los bordes
+     se convierten en una mancha. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e9bf0"/>
+      <stop offset="1" stop-color="#0d78c4"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="2" y="2" width="124" height="124" rx="26" fill="url(#fondo)"/>
+
+  <path d="M36 20h36l22 22v58a8 8 0 0 1-8 8H36a8 8 0 0 1-8-8V28a8 8 0 0 1 8-8z" fill="#ffffff"/>
+  <path d="M72 20l22 22H72z" fill="#bcdff8"/>
+
+  <path d="M44 66h30" stroke="#0b6db3" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <path d="M68 52l16 14-16 14" stroke="#0b6db3" stroke-width="14" stroke-linecap="round"
+        stroke-linejoin="round" fill="none"/>
+</svg>

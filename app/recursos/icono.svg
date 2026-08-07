@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Icono de MaxCopier: dos hojas (la copia) y la flecha que va de una a otra,
+     sobre el azul de la paleta. Formas grandes y sin detalles finos para que
+     también se lea pequeño; para 16 y 20 px hay una versión aún más simple en
+     `icono-pequeno.svg`. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e9bf0"/>
+      <stop offset="1" stop-color="#0d78c4"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="4" y="4" width="120" height="120" rx="27" fill="url(#fondo)"/>
+
+  <!-- Hoja de origen: detrás, a la izquierda y solo insinuada. -->
+  <path d="M28 22h26l14 14v40a6 6 0 0 1-6 6H28a6 6 0 0 1-6-6V28a6 6 0 0 1 6-6z"
+        fill="#ffffff" fill-opacity="0.42"/>
+  <path d="M54 22l14 14H54z" fill="#ffffff" fill-opacity="0.62"/>
+
+  <!-- Hoja de destino: delante, con un reborde del color del fondo que la
+       separa de la de atrás. -->
+  <path d="M56 38h34l20 20v40a10 10 0 0 1-10 10H56a10 10 0 0 1-10-10V48a10 10 0 0 1 10-10z"
+        fill="#0b6db3"/>
+  <path d="M59 42h29l18 18v37a7 7 0 0 1-7 7H59a7 7 0 0 1-7-7V49a7 7 0 0 1 7-7z"
+        fill="#ffffff"/>
+  <path d="M88 42l18 18H88z" fill="#bcdff8"/>
+
+  <!-- Flecha de la copia, del origen al destino. -->
+  <path d="M62 78h24" stroke="#0b6db3" stroke-width="12" stroke-linecap="round" fill="none"/>
+  <path d="M80 65l14 13-14 13" stroke="#0b6db3" stroke-width="12" stroke-linecap="round"
+        stroke-linejoin="round" fill="none"/>
+</svg>

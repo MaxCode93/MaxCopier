@@ -1,0 +1,34 @@
+// Icono del ejecutable en el Explorador y en la barra de tareas de Windows.
+// El primer icono del .rc es el que Windows usa para el .exe.
+IDI_ICON1 ICON "maxcopier.ico"
+
+
+1 VERSIONINFO
+FILEVERSION 0,1,0,0
+PRODUCTVERSION 0,1,0,0
+FILEFLAGSMASK 0x3f
+FILEFLAGS 0x0
+FILEOS 0x40004
+FILETYPE 0x1
+FILESUBTYPE 0x0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Crafted by Maxwell"
+            VALUE "FileDescription", "MaxCopier"
+            VALUE "FileVersion", "0.1.0"
+            VALUE "InternalName", "MaxCopier"
+            VALUE "OriginalFilename", "MaxCopier.exe"
+            VALUE "ProductName", "MaxCopier"
+            VALUE "ProductVersion", "0.1.0"
+            VALUE "LegalCopyright", "Copyright 2026"
+            VALUE "Comments", "Crafted by Maxwell"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 0x4B0
+    END
+END

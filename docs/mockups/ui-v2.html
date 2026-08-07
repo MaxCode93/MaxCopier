@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MaxCopier — UI v2</title>
+<style>
+*{box-sizing:border-box;font-family:"Segoe UI",Tahoma,Arial,sans-serif}
+body{margin:0;background:#0b0c0e;padding:26px;display:flex;flex-direction:column;gap:34px;align-items:center}
+
+/* ================= temas ================= */
+.dark{
+  --acc:#1e9bf0;--acc2:#0d78c4;--accsoft:rgba(30,155,240,.18);
+  --tb1:#1b9bf0;--tb2:#0f82d0;
+  --bg:#191c21;--bg2:#20242a;--bg3:#262b32;--line:#31363e;
+  --txt:#e9ecf1;--dim:#98a1ad;--bar:#111318;
+  --ok:#43c96f;--warn:#e5a92a;--err:#e35a5a;--shadow:0 14px 38px rgba(0,0,0,.6);
+}
+.light{
+  --acc:#1289e0;--acc2:#0a6cb5;--accsoft:rgba(18,137,224,.14);
+  --tb1:#33a8f2;--tb2:#1289e0;
+  --bg:#fbfcfe;--bg2:#f1f4f8;--bg3:#e7ecf3;--line:#ccd5e0;
+  --txt:#161a1f;--dim:#5b6472;--bar:#e2e8f0;
+  --ok:#1f9d54;--warn:#b8811a;--err:#cf3f3f;--shadow:0 14px 38px rgba(0,0,0,.35);
+}
+
+.win{width:880px;background:var(--bg);color:var(--txt);border:1px solid rgba(0,0,0,.55);border-radius:7px;overflow:hidden;box-shadow:var(--shadow)}
+.cap{color:#7f8794;font-size:12px;margin-top:-22px;text-align:center;max-width:880px}
+.sp{flex:1}
+
+/* ================= barra de título ================= */
+.tb{height:28px;background:linear-gradient(var(--tb1),var(--tb2));color:#fff;display:flex;align-items:center;gap:8px;padding:0 4px 0 7px;font-size:12.5px}
+.mark{width:18px;height:18px;border-radius:4px;background:#fff;color:var(--acc2);font-weight:800;font-size:9.5px;display:grid;place-items:center;letter-spacing:-.5px}
+.tb .pct{font-weight:700}
+.tb .ttl{opacity:.95;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:620px}
+.wb{width:26px;height:22px;display:grid;place-items:center;font-size:11px;border-radius:3px}
+.wb:hover{background:rgba(255,255,255,.2)}
+
+/* ================= cabecera de transferencia ================= */
+.head{padding:8px 10px 6px;border-bottom:1px solid var(--line)}
+.paths{display:grid;grid-template-columns:54px 1fr auto;gap:2px 8px;font-size:12.5px;align-items:center;margin-bottom:7px}
+.paths .k{color:var(--dim)}
+.paths .v{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.paths .a{color:var(--acc);font-size:11.5px}
+
+.pr{position:relative;height:23px;margin-bottom:4px;border-radius:4px;overflow:hidden;background:var(--bar);border:1px solid var(--line)}
+.pr .fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(var(--acc),var(--acc2))}
+.light .pr .fill{background:linear-gradient(#a5d9fb,#71c3f3)}
+.pr .l{position:absolute;left:8px;top:0;bottom:0;display:flex;align-items:center;font-size:12.5px;max-width:56%;overflow:hidden;white-space:nowrap}
+.pr .c{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700}
+.pr .r{position:absolute;right:8px;top:0;bottom:0;display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--dim)}
+.pr.sub{height:21px}
+
+.spark{width:74px;height:15px;display:block}
+
+.metarow{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:2px 9px;font-size:11.5px;color:var(--dim);white-space:nowrap}
+.chip.on{color:var(--txt);border-color:var(--acc);background:var(--accsoft)}
+.chip b{font-weight:600;color:var(--txt)}
+.drive{display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line);border-radius:5px;padding:3px 9px 3px 4px;font-size:11.5px;white-space:nowrap}
+.hd{background:var(--acc);color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px}
+.free{width:86px;height:5px;border-radius:3px;background:var(--bar);border:1px solid var(--line);overflow:hidden}
+.free i{display:block;height:100%;background:var(--acc)}
+
+.actions{display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--bg2);border-bottom:1px solid var(--line)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--line);border-radius:5px;background:var(--bg3);font-size:12.5px;white-space:nowrap}
+.btn.pri{background:var(--acc);border-color:var(--acc2);color:#fff}
+.btn.gh{background:transparent}
+.btn.ic{padding:5px 8px}
+
+/* ================= pestañas ================= */
+.tabs{display:flex;align-items:center;gap:2px;padding:6px 8px 0;font-size:12px;border-bottom:1px solid var(--line);background:var(--bg)}
+.tab{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;color:var(--dim);border:1px solid transparent;border-bottom:none;border-radius:5px 5px 0 0;margin-bottom:-1px}
+.tab.on{color:var(--txt);background:var(--bg2);border-color:var(--line);border-bottom-color:var(--bg2)}
+.badge{font-size:10px;padding:0 5px;border-radius:8px;background:var(--bg3);border:1px solid var(--line);color:var(--dim)}
+.badge.err{color:#fff;background:var(--err);border-color:var(--err)}
+.badge.warn{color:#fff;background:var(--warn);border-color:var(--warn)}
+
+/* ================= cuerpo lista ================= */
+.pane{display:flex;background:var(--bg2)}
+.vtool{width:34px;border-right:1px solid var(--line);padding:5px 0;display:flex;flex-direction:column;gap:2px;align-items:center;background:var(--bg)}
+.vtool .i{width:26px;height:21px;display:grid;place-items:center;color:var(--acc);font-size:13px;border-radius:4px}
+.vtool .i:hover{background:var(--bg3)}
+.vtool .sep{width:18px;height:1px;background:var(--line);margin:3px 0}
+.listwrap{flex:1;min-width:0}
+.ltool{display:flex;align-items:center;gap:7px;padding:6px 8px;border-bottom:1px solid var(--line);font-size:12px;white-space:nowrap}
+.search{display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:3px 8px;width:210px;color:var(--dim);white-space:nowrap}
+.sel{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:3px 8px;font-size:12px;white-space:nowrap}
+
+table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+th{text-align:left;font-weight:500;color:var(--dim);font-size:11.5px;padding:5px 8px;border-bottom:1px solid var(--line);background:var(--bg)}
+td{padding:4px 8px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+tr.job td{background:var(--bg3);font-weight:600}
+tr.job .mini{display:inline-block;width:120px;height:6px;border-radius:3px;background:var(--bar);border:1px solid var(--line);vertical-align:-1px;overflow:hidden}
+tr.job .mini i{display:block;height:100%;background:var(--acc)}
+tr.sel td{background:var(--accsoft)}
+tr.alert td{background:rgba(229,169,42,.12)}
+tr.bad td{background:rgba(227,90,90,.12)}
+.ind{color:var(--dim)}
+.tag{font-size:10.5px;padding:1px 6px;border-radius:9px;border:1px solid var(--line);color:var(--dim)}
+.tag.ok{color:var(--ok);border-color:var(--ok)}
+.tag.run{color:var(--acc);border-color:var(--acc)}
+.tag.err{color:var(--err);border-color:var(--err)}
+.tag.warn{color:var(--warn);border-color:var(--warn)}
+.mono{font-family:Consolas,monospace;font-size:11px;color:var(--dim)}
+.inline{display:inline-flex;gap:4px}
+.mb{font-size:10.5px;padding:1px 7px;border:1px solid var(--acc);color:var(--acc);border-radius:4px}
+.rowbar{position:relative;height:12px;border-radius:3px;background:var(--bar);border:1px solid var(--line);overflow:hidden}
+.rowbar i{display:block;height:100%;background:var(--acc)}
+.rowbar span{position:absolute;inset:0;display:grid;place-items:center;font-size:9.5px;color:var(--txt)}
+
+.sb{display:flex;align-items:center;gap:16px;font-size:11.5px;color:var(--dim);padding:5px 10px;border-top:1px solid var(--line);background:var(--bg)}
+.sb b{color:var(--txt);font-weight:600}
+
+/* ================= opciones / diálogos ================= */
+.optpane{display:flex;background:var(--bg2);min-height:250px}
+.side{width:172px;border-right:1px solid var(--line);padding:6px 0;background:var(--bg)}
+.side div{padding:6px 13px;font-size:12.5px;color:var(--dim)}
+.side div.on{background:var(--accsoft);color:var(--txt);box-shadow:inset 2px 0 0 var(--acc)}
+.opts{flex:1;padding:10px 14px}
+.orow{display:flex;align-items:center;gap:9px;margin-bottom:9px;font-size:12.5px;flex-wrap:wrap}
+.orow .k{width:180px;color:var(--dim)}
+.chk{width:13px;height:13px;border:1px solid var(--line);border-radius:3px;background:var(--bg);display:inline-block;vertical-align:-2px}
+.chk.on{background:var(--acc);border-color:var(--acc)}
+.rng{width:150px;height:4px;background:var(--bar);border:1px solid var(--line);border-radius:3px;position:relative}
+.rng i{position:absolute;left:0;top:0;bottom:0;width:45%;background:var(--acc);border-radius:3px}
+.rng b{position:absolute;left:43%;top:-5px;width:12px;height:12px;border-radius:50%;background:var(--acc);border:2px solid var(--bg)}
+hr{border:0;border-top:1px solid var(--line);margin:11px 0}
+.card{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 11px;font-size:12px}
+
+.tray{width:308px;background:var(--bg2);color:var(--txt);border:1px solid rgba(0,0,0,.55);border-radius:7px;padding:5px;font-size:12.5px;box-shadow:var(--shadow)}
+.tray div{padding:5px 9px;border-radius:4px}
+.tray div.hl{background:var(--accsoft)}
+.tray .s{color:var(--dim);font-size:11.5px}
+.row2{display:flex;gap:24px;align-items:flex-start;justify-content:center;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ 1 · COMPACTA (OSCURO) ═══════════════ -->
+<div class="win dark">
+  <div class="tb"><div class="mark">MC</div><span class="pct">3 %</span>
+    <span class="ttl">Copia · D:\Install\Windows\ → D:\ · 1 trabajo</span><div class="sp"></div>
+    <div class="wb" title="Minimizar a la bandeja">&#8600;</div><div class="wb">&#8212;</div><div class="wb">&#9633;</div><div class="wb">&#10005;</div></div>
+
+  <div class="head">
+    <div class="paths">
+      <span class="k">Desde</span><span class="v">D:\Install\Windows\</span><span class="a">Abrir</span>
+      <span class="k">Hacia</span><span class="v">D:\</span><span class="a">Cambiar…</span>
+    </div>
+
+    <div class="pr">
+      <div class="fill" style="width:3%"></div>
+      <div class="l">Total · fichero 1 de 1 · 545 MB de 19,42 GB</div>
+      <div class="c">3 %</div>
+      <div class="r"><svg class="spark" viewBox="0 0 74 15"><polyline points="0,12 6,9 12,11 18,6 24,8 30,4 36,7 42,3 48,6 54,4 60,7 66,5 74,6" fill="none" stroke="#1e9bf0" stroke-width="1.4"/></svg><span>790 KB/s</span></div>
+    </div>
+
+    <div class="pr sub">
+      <div class="fill" style="width:3%"></div>
+      <div class="l">Archivo de Prueba.iso · 19,42 GB</div>
+      <div class="c">3 %</div>
+      <div class="r"><span>06:57:47 restante</span></div>
+    </div>
+
+    <div class="metarow">
+      <div class="drive"><span class="hd">HD</span><span>[D:] Datos</span><span class="free"><i style="width:62%"></i></span><span>412 GB libres</span></div>
+      <div class="chip on">&#10003; Verificar <b>xxHash3</b></div>
+      <div class="chip">&#8646; Límite <b>sin límite</b></div>
+      <div class="chip">Colisión: <b>preguntar</b></div>
+      <div class="sp"></div>
+      <div class="chip">Al terminar: <b>nada</b> &#9662;</div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <div class="btn pri">&#10073;&#10073; Pausar</div>
+    <div class="btn">&#9197; Saltar archivo</div>
+    <div class="btn">&#10005; Cancelar</div>
+    <div class="btn ic" title="Añadir trabajo">&#43;</div>
+    <div class="btn ic" title="Favoritos / destinos rápidos">&#9825;</div>
+    <div class="sp"></div>
+    <div class="btn gh" title="Mostrar lista de copia">&#9662; Detalles</div>
+  </div>
+</div>
+<div class="cap"><b>1 · Ventana compacta (oscuro)</b> — cambios respecto a SuperCopier: rutas con “Abrir/Cambiar”, mini-gráfica de velocidad,
+barra de espacio libre en el destino, chips de estado (verificación, límite, política de colisión, acción final) y botones con etiqueta en vez de solo iconos.</div>
+
+<!-- ═══════════════ 2 · COMPACTA (CLARO) ═══════════════ -->
+<div class="win light">
+  <div class="tb"><div class="mark">MC</div><span class="pct">3 %</span>
+    <span class="ttl">Copia · D:\Install\Windows\ → D:\ · 1 trabajo</span><div class="sp"></div>
+    <div class="wb">&#8600;</div><div class="wb">&#8212;</div><div class="wb">&#9633;</div><div class="wb">&#10005;</div></div>
+  <div class="head">
+    <div class="paths">
+      <span class="k">Desde</span><span class="v">D:\Install\Windows\</span><span class="a">Abrir</span>
+      <span class="k">Hacia</span><span class="v">D:\</span><span class="a">Cambiar…</span>
+    </div>
+    <div class="pr">
+      <div class="fill" style="width:3%"></div>
+      <div class="l">Total · fichero 1 de 1 · 545 MB de 19,42 GB</div>
+      <div class="c">3 %</div>
+      <div class="r"><svg class="spark" viewBox="0 0 74 15"><polyline points="0,12 6,9 12,11 18,6 24,8 30,4 36,7 42,3 48,6 54,4 60,7 66,5 74,6" fill="none" stroke="#1289e0" stroke-width="1.4"/></svg><span>790 KB/s</span></div>
+    </div>
+    <div class="pr sub">
+      <div class="fill" style="width:3%"></div>
+      <div class="l">Archivo de Prueba.iso · 19,42 GB</div>
+      <div class="c">3 %</div>
+      <div class="r"><span>06:57:47 restante</span></div>
+    </div>
+    <div class="metarow">
+      <div class="drive"><span class="hd">HD</span><span>[D:] Datos</span><span class="free"><i style="width:62%"></i></span><span>412 GB libres</span></div>
+      <div class="chip on">&#10003; Verificar <b>xxHash3</b></div>
+      <div class="chip">&#8646; Límite <b>sin límite</b></div>
+      <div class="chip">Colisión: <b>preguntar</b></div>
+      <div class="sp"></div>
+      <div class="chip">Al terminar: <b>nada</b> &#9662;</div>
+    </div>
+  </div>
+  <div class="actions">
+    <div class="btn pri">&#10073;&#10073; Pausar</div>
+    <div class="btn">&#9197; Saltar archivo</div>
+    <div class="btn">&#10005; Cancelar</div>
+    <div class="btn ic">&#43;</div><div class="btn ic">&#9825;</div>
+    <div class="sp"></div>
+    <div class="btn gh">&#9662; Detalles</div>
+  </div>
+</div>
+<div class="cap"><b>2 · Ventana compacta (claro)</b> — misma geometría, solo cambia la hoja de estilos.</div>
+
+<!-- ═══════════════ 3 · EXPANDIDA · LISTA DE COPIA (OSCURO) ═══════════════ -->
+<div class="win dark">
+  <div class="tb"><div class="mark">MC</div><span class="pct">63 %</span>
+    <span class="ttl">5 trabajos · 212 MB/s · restante 00:04:12</span><div class="sp"></div>
+    <div class="wb">&#8600;</div><div class="wb">&#8212;</div><div class="wb">&#9633;</div><div class="wb">&#10005;</div></div>
+
+  <div class="head">
+    <div class="paths">
+      <span class="k">Desde</span><span class="v">D:\Fotos\2024\</span><span class="a">Abrir</span>
+      <span class="k">Hacia</span><span class="v">E:\Backup\Fotos\2024\</span><span class="a">Cambiar…</span>
+    </div>
+    <div class="pr">
+      <div class="fill" style="width:63%"></div>
+      <div class="l">Total · fichero 1.842 de 3.190 · 12,4 GB de 19,7 GB</div>
+      <div class="c">63 %</div>
+      <div class="r"><svg class="spark" viewBox="0 0 74 15"><polyline points="0,11 6,7 12,9 18,5 24,7 30,3 36,6 42,2 48,5 54,3 60,6 66,4 74,5" fill="none" stroke="#1e9bf0" stroke-width="1.4"/></svg><span>212 MB/s</span></div>
+    </div>
+    <div class="pr sub">
+      <div class="fill" style="width:78%"></div>
+      <div class="l">IMG_20240712_183245.CR3 · 41,2 MB · hilo 2/4</div>
+      <div class="c">78 %</div>
+      <div class="r"><span>00:04:12 restante</span></div>
+    </div>
+    <div class="metarow">
+      <div class="drive"><span class="hd">SSD</span><span>[E:] Backup</span><span class="free"><i style="width:38%"></i></span><span>1,2 TB libres</span></div>
+      <div class="chip on">&#10003; Verificar <b>xxHash3</b></div>
+      <div class="chip on">&#8646; Límite <b>40 MB/s</b></div>
+      <div class="chip">Colisión: <b>preguntar</b></div>
+      <div class="chip">Hilos: <b>auto (4)</b></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <div class="btn pri">&#10073;&#10073; Pausar todo</div>
+    <div class="btn">&#9197; Saltar</div>
+    <div class="btn">&#10005; Cancelar</div>
+    <div class="btn">&#8635; Reintentar <span class="badge err">2</span></div>
+    <div class="btn ic" title="Verificar hashes">&#10003;</div>
+    <div class="btn ic" title="Añadir trabajo">&#43;</div>
+    <div class="sp"></div>
+    <div class="chip">Al terminar: <b>nada</b> &#9662;</div>
+    <div class="btn gh" title="Guardar / cargar lista de copia">&#128190; Lista &#9662;</div>
+    <div class="btn gh" title="Volver a la vista compacta">&#9652;</div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab on">&#9776; Lista de copia <span class="badge">3.190</span></div>
+    <div class="tab">&#9707; Trabajos <span class="badge">5</span></div>
+    <div class="tab">&#9888; Colisiones <span class="badge warn">5</span></div>
+    <div class="tab">&#10007; Errores <span class="badge err">2</span></div>
+    <div class="tab">&#9202; Registro</div>
+    <div class="tab">&#9881; Opciones</div>
+  </div>
+
+  <div class="pane">
+    <div class="vtool">
+      <div class="i" title="Mover al principio">&#10514;</div>
+      <div class="i" title="Subir">&#9650;</div>
+      <div class="i" title="Bajar">&#9660;</div>
+      <div class="i" title="Mover al final">&#10515;</div>
+      <div class="sep"></div>
+      <div class="i" title="Añadir archivos/carpetas">&#43;</div>
+      <div class="i" title="Quitar de la lista">&#8722;</div>
+      <div class="i" title="Cambiar destino de lo seleccionado">&#8631;</div>
+      <div class="sep"></div>
+      <div class="i" title="Reintentar seleccionados">&#8635;</div>
+      <div class="i" title="Copiar ruta / abrir carpeta">&#128193;</div>
+      <div class="i" title="Guardar hashes (.sha256)">&#127380;</div>
+    </div>
+
+    <div class="listwrap">
+      <div class="ltool">
+        <div class="search">&#128269; <span>filtrar por nombre…</span></div>
+        <div class="sel">Estado: todos &#9662;</div>
+        <div class="sel">Agrupar por trabajo &#9662;</div>
+        <div class="sp"></div>
+        <span class="ind">1.840 copiados · 2 con error · 5 en colisión · 1.343 en cola</span>
+      </div>
+
+      <table>
+        <colgroup><col style="width:24px"><col><col style="width:72px"><col style="width:88px"><col style="width:112px"><col style="width:218px"><col style="width:140px"></colgroup>
+        <tr><th></th><th>Fuente</th><th>Tamaño</th><th>Progreso</th><th>Estado</th><th>Acciones rápidas</th><th>Destino / hash</th></tr>
+
+        <tr class="job"><td>&#9662;</td><td>Trabajo 1 · D:\Fotos\2024\ &#8594; E:\Backup\Fotos\2024\</td><td>19,7 GB</td>
+          <td><span class="mini"><i style="width:63%"></i></span></td><td><span class="tag run">63 % copiando</span></td>
+          <td><span class="inline"><span class="mb">Pausar</span><span class="mb">Prioridad</span></span></td><td class="mono">4 hilos</td></tr>
+
+        <tr><td>&#10003;</td><td>IMG_20240712_183240.CR3</td><td>39,8 MB</td>
+          <td><div class="rowbar"><i style="width:100%"></i><span>100 %</span></div></td>
+          <td><span class="tag ok">Verificado</span></td><td class="ind">—</td><td class="mono">9f13a4c7 = 9f13a4c7</td></tr>
+
+        <tr class="sel"><td>&#9656;</td><td>IMG_20240712_183245.CR3</td><td>41,2 MB</td>
+          <td><div class="rowbar"><i style="width:78%"></i><span>78 %</span></div></td>
+          <td><span class="tag run">Copiando</span></td><td><span class="inline"><span class="mb">Saltar</span></span></td><td class="mono">calculando…</td></tr>
+
+        <tr class="alert"><td>&#9888;</td><td>video_boda.mp4</td><td>4,1 GB</td>
+          <td><div class="rowbar"><i style="width:0"></i><span>—</span></div></td>
+          <td><span class="tag warn">Ya existe</span></td>
+          <td><span class="inline"><span class="mb">Sobrescribir</span><span class="mb">Omitir</span><span class="mb">Renombrar</span></span></td><td class="mono">destino: 3,98 GB</td></tr>
+
+        <tr class="bad"><td>&#10007;</td><td>raw\_thumbs.db</td><td>112 KB</td>
+          <td><div class="rowbar"><i style="width:0"></i><span>0 %</span></div></td>
+          <td><span class="tag err">Bloqueado (32)</span></td>
+          <td><span class="inline"><span class="mb">Reintentar</span><span class="mb">Omitir</span><span class="mb">VSS</span></span></td><td class="mono">en uso por otro proceso</td></tr>
+
+        <tr><td>&#9203;</td><td>raw\IMG_20240712_183251.CR3</td><td>40,7 MB</td>
+          <td><div class="rowbar"><i style="width:0"></i><span>—</span></div></td>
+          <td><span class="tag">En cola</span></td><td class="ind">—</td><td class="mono">—</td></tr>
+
+        <tr class="job"><td>&#9656;</td><td>Trabajo 2 · C:\Users\Muki\Videos\ &#8594; \\NAS\media\</td><td>84,2 GB</td>
+          <td><span class="mini"><i style="width:12%"></i></span></td><td><span class="tag">12 % en pausa</span></td>
+          <td><span class="inline"><span class="mb">Reanudar</span><span class="mb">Quitar</span></span></td><td class="mono">esperando red</td></tr>
+      </table>
+
+      <div class="sb">
+        <span>Copiando: <b>00:00:37</b></span>
+        <span>Media: <b>188 MB/s</b></span>
+        <span>Máxima: <b>341 MB/s</b></span>
+        <span>Restante: <b>00:04:12</b></span>
+        <div class="sp"></div>
+        <span>Arrastra archivos aquí para añadirlos a la cola</span>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="cap"><b>3 · Vista expandida · Lista de copia (oscuro)</b> — mejoras: filas de <i>trabajo</i> agrupando sus archivos con su propia barra,
+columna de progreso por archivo, <b>acciones rápidas en la propia fila</b> para colisiones y errores (sin diálogo modal),
+buscador + filtro por estado, contadores, barra de herramientas vertical de cola ampliada (mover, añadir, quitar, cambiar destino,
+reintentar, abrir carpeta, guardar hashes) y barra de estado con tiempo, media, máxima y restante.</div>
+
+<!-- ═══════════════ 4 · EXPANDIDA · OPCIONES (CLARO) ═══════════════ -->
+<div class="win light">
+  <div class="tb"><div class="mark">MC</div><span class="pct">63 %</span>
+    <span class="ttl">5 trabajos · 212 MB/s · restante 00:04:12</span><div class="sp"></div>
+    <div class="wb">&#8600;</div><div class="wb">&#8212;</div><div class="wb">&#9633;</div><div class="wb">&#10005;</div></div>
+
+  <div class="head">
+    <div class="paths">
+      <span class="k">Desde</span><span class="v">D:\Fotos\2024\</span><span class="a">Abrir</span>
+      <span class="k">Hacia</span><span class="v">E:\Backup\Fotos\2024\</span><span class="a">Cambiar…</span>
+    </div>
+    <div class="pr">
+      <div class="fill" style="width:63%"></div>
+      <div class="l">Total · fichero 1.842 de 3.190 · 12,4 GB de 19,7 GB</div>
+      <div class="c">63 %</div>
+      <div class="r"><svg class="spark" viewBox="0 0 74 15"><polyline points="0,11 6,7 12,9 18,5 24,7 30,3 36,6 42,2 48,5 54,3 60,6 66,4 74,5" fill="none" stroke="#1289e0" stroke-width="1.4"/></svg><span>212 MB/s</span></div>
+    </div>
+    <div class="pr sub">
+      <div class="fill" style="width:78%"></div>
+      <div class="l">IMG_20240712_183245.CR3 · 41,2 MB · hilo 2/4</div>
+      <div class="c">78 %</div>
+      <div class="r"><span>00:04:12 restante</span></div>
+    </div>
+    <div class="metarow">
+      <div class="drive"><span class="hd">SSD</span><span>[E:] Backup</span><span class="free"><i style="width:38%"></i></span><span>1,2 TB libres</span></div>
+      <div class="chip on">&#10003; Verificar <b>xxHash3</b></div>
+      <div class="chip on">&#8646; Límite <b>40 MB/s</b></div>
+      <div class="chip">Hilos: <b>auto (4)</b></div>
+      <div class="sp"></div>
+      <div class="chip">Al terminar: <b>nada</b> &#9662;</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab">&#9776; Lista de copia <span class="badge">3.190</span></div>
+    <div class="tab">&#9707; Trabajos <span class="badge">5</span></div>
+    <div class="tab">&#9888; Colisiones <span class="badge warn">5</span></div>
+    <div class="tab">&#10007; Errores <span class="badge err">2</span></div>
+    <div class="tab">&#9202; Registro</div>
+    <div class="tab on">&#9881; Opciones</div>
+  </div>
+
+  <div class="optpane">
+    <div class="side">
+      <div>General</div><div class="on">Motor de copia</div><div>Colisiones</div><div>Errores</div>
+      <div>Verificación</div><div>Filtros / ignorar</div><div>Integración Explorer</div>
+      <div>Apariencia y temas</div><div>Idioma</div><div>Registros e informes</div><div>Automatización</div>
+    </div>
+    <div class="opts">
+      <div class="orow"><span class="k">Hilos por dispositivo</span><span class="sel">Auto — SSD 4 · HDD 1 &#9662;</span></div>
+      <div class="orow"><span class="k">Tamaño de bloque</span><span class="sel">Adaptativo 64 KB – 8 MB &#9662;</span></div>
+      <div class="orow"><span class="k">E/S sin búfer desde</span><span class="sel">16 MB</span></div>
+      <div class="orow"><span class="k">Límite de velocidad</span><div class="rng"><i></i><b></b></div><span>40 MB/s</span></div>
+      <hr>
+      <div class="orow"><span class="chk on"></span><span>Preservar fechas, atributos, ACL y flujos alternativos (ADS)</span></div>
+      <div class="orow"><span class="chk on"></span><span>Rutas largas (&gt; 260 caracteres) mediante \\?\</span></div>
+      <div class="orow"><span class="chk on"></span><span>Reanudar transferencias incompletas (archivo lateral .mcpart)</span></div>
+      <div class="orow"><span class="chk on"></span><span>Comprobar espacio libre y permisos antes de empezar</span></div>
+      <div class="orow"><span class="chk"></span><span>Cola por dispositivo físico (evita thrashing en HDD)</span></div>
+      <div class="orow"><span class="chk"></span><span>Copiar archivos bloqueados con instantáneas VSS (requiere elevación)</span></div>
+      <div class="card">Con estos ajustes, un archivo &gt; 16 MB se copia sin caché del sistema y en bloques de hasta 8 MB;
+        los archivos pequeños van en 4 hilos con caché normal.</div>
+    </div>
+  </div>
+  <div class="sb"><span>Copiando: <b>00:00:37</b></span><span>Media: <b>188 MB/s</b></span><span>Máxima: <b>341 MB/s</b></span><div class="sp"></div><span>Ajustes guardados automáticamente</span></div>
+</div>
+<div class="cap"><b>4 · Vista expandida · Opciones (claro)</b> — las opciones son una <b>pestaña</b> más (como en SuperCopier), no una ventana aparte;
+panel lateral por categorías y una tarjeta que explica en lenguaje llano el efecto de la combinación elegida.</div>
+
+<!-- ═══════════════ 5 · BANDEJA + MENÚ CONTEXTUAL ═══════════════ -->
+<div class="row2">
+  <div style="display:flex;flex-direction:column;gap:8px;align-items:center">
+    <div class="tray dark">
+      <div class="hl"><b>MaxCopier</b> · 63 % · 212 MB/s<div class="s">D:\Fotos\2024 &#8594; E:\Backup — 00:04:12</div></div>
+      <div>&#10073;&#10073; Pausar todo</div>
+      <div>&#8646; Límite de velocidad &#9656;</div>
+      <div>&#9707; Trabajos (5) &#9656;</div>
+      <div>&#128190; Cargar lista de copia…</div>
+      <div>&#9633; Abrir ventana</div>
+      <div>&#9881; Opciones</div>
+      <div>&#10005; Salir</div>
+    </div>
+    <div class="cap" style="max-width:308px;margin:0"><b>5 · Bandeja</b> — control sin abrir la ventana.</div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:8px;align-items:center">
+    <div class="tray light" style="width:330px">
+      <div class="hl"><b>Explorador</b> · menú contextual</div>
+      <div>Copiar con MaxCopier</div>
+      <div>Mover con MaxCopier</div>
+      <div>Pegar con MaxCopier</div>
+      <div>Copiar a favorito &#9656; <span class="s">E:\Backup · \\NAS\media</span></div>
+      <div>Verificar hash / crear .sha256</div>
+    </div>
+    <div class="cap" style="max-width:330px;margin:0"><b>6 · Integración con el Explorador</b> — <i>IExplorerCommand</i> + destinos favoritos.</div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style>
+  :root{--bg:#1e1f22;--panel:#26282c;--panel2:#2d3035;--line:#3a3d43;--txt:#e6e7ea;--dim:#9aa0a8;--accent:#3d8bfd;--ok:#3ec46d;--warn:#e0a92b;--err:#e05252;}
+  *{box-sizing:border-box;font-family:"Segoe UI",Inter,Arial,sans-serif}
+  body{margin:0;background:#111;padding:24px;display:flex;flex-wrap:wrap;gap:26px;align-items:flex-start;justify-content:center}
+  .win{background:var(--bg);color:var(--txt);border:1px solid #000;border-radius:8px;overflow:hidden;box-shadow:0 14px 40px rgba(0,0,0,.6)}
+  .title{height:36px;background:#191a1d;display:flex;align-items:center;padding:0 10px;gap:8px;border-bottom:1px solid var(--line);font-size:12.5px;font-weight:600}
+  .logo{width:16px;height:16px;border-radius:4px;background:linear-gradient(135deg,#3d8bfd,#7bd0ff)}
+  .sp{flex:1}
+  .btnw{color:var(--dim);font-size:11px;padding:0 5px}
+  .body{padding:14px}
+  .b{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;font-size:12.5px}
+  .b.pri{background:var(--accent);border-color:#2f6fd0}
+  .row{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  .lbl{font-size:12px;color:var(--dim)}
+  .val{font-size:12.5px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px}
+  .cap{width:100%;text-align:center;color:#8b9099;font-size:12px;margin-top:-14px}
+  .sel{background:#191a1d;border:1px solid var(--line);border-radius:6px;padding:5px 9px;font-size:12.5px}
+  .side{width:170px;background:var(--panel);border-right:1px solid var(--line);padding:8px 0}
+  .side div{padding:7px 14px;font-size:12.5px;color:var(--dim)}
+  .side div.on{background:#2b3a52;color:#fff;border-left:2px solid var(--accent)}
+  .grid{display:flex}
+  .chk{width:12px;height:12px;border:1px solid var(--line);border-radius:3px;display:inline-block;vertical-align:-2px;background:#191a1d;margin-right:6px}
+  .chk.on{background:var(--accent);border-color:var(--accent)}
+  .rng{width:150px;height:4px;background:#191a1d;border-radius:3px;position:relative;border:1px solid var(--line)}
+  .rng i{position:absolute;left:0;top:0;bottom:0;width:45%;background:var(--accent);border-radius:3px}
+  .rng b{position:absolute;left:43%;top:-5px;width:12px;height:12px;border-radius:50%;background:#cfe0ff}
+  hr{border:0;border-top:1px solid var(--line);margin:12px 0}
+  .mono{font-family:Consolas,monospace;font-size:11.5px;color:var(--dim)}
+  .tray{width:300px;background:#26282c;border:1px solid #000;border-radius:8px;padding:6px;font-size:12.5px;box-shadow:0 14px 40px rgba(0,0,0,.6);color:#e6e7ea}
+  .tray div{padding:6px 10px;border-radius:5px}
+  .tray div.hl{background:#2b3a52}
+  .tray .s{color:#9aa0a8;font-size:11.5px}
+</style>
+</head>
+<body>
+
+<!-- Colisión -->
+<div class="win" style="width:470px">
+  <div class="title"><div class="logo"></div>Colisión de archivos<div class="sp"></div><span class="btnw">&#10005;</span></div>
+  <div class="body">
+    <div style="font-size:12.5px">El archivo <b>video_boda.mp4</b> ya existe en el destino.</div>
+    <div class="row" style="gap:14px;margin-top:12px">
+      <div class="card" style="flex:1"><b>Origen</b><br><span class="mono">4,10 GB<br>2024-07-12 18:32<br>xxh3 9f13a4c7…</span></div>
+      <div class="card" style="flex:1"><b>Destino</b><br><span class="mono">3,98 GB<br>2024-07-10 09:11<br>xxh3 4be0117a…</span></div>
+    </div>
+    <div class="row">
+      <div class="b pri">Sobrescribir</div><div class="b">Si es más nuevo</div><div class="b">Renombrar</div><div class="b">Omitir</div><div class="b">Reanudar</div>
+    </div>
+    <div class="row"><span class="chk on"></span><span class="lbl">Aplicar a todas las colisiones restantes de este trabajo</span></div>
+    <div class="row"><span class="lbl">Patrón de renombrado:</span><span class="sel">%nombre% (%n%)%ext%</span></div>
+  </div>
+</div>
+<div class="cap">Diálogo de colisión (con comparación y "aplicar a todo")</div>
+
+<!-- Error -->
+<div class="win" style="width:470px">
+  <div class="title"><div class="logo"></div>Error de transferencia<div class="sp"></div><span class="btnw">&#10005;</span></div>
+  <div class="body">
+    <div style="font-size:12.5px">No se puede leer <b>_thumbs.db</b></div>
+    <div class="card" style="margin-top:10px">ERROR_SHARING_VIOLATION (32) — el archivo está en uso por otro proceso.<br>
+      <span class="mono">D:\Fotos\2024\raw\_thumbs.db</span></div>
+    <div class="row"><div class="b pri">Reintentar</div><div class="b">Omitir</div><div class="b">Omitir todos</div><div class="b">Copiar con VSS</div><div class="b">Cancelar trabajo</div></div>
+    <div class="row"><span class="chk on"></span><span class="lbl">Reintento automático: 3 intentos cada 5 s, luego poner al final de la cola</span></div>
+    <div class="row"><span class="chk on"></span><span class="lbl">Esperar reconexión de unidad/red en lugar de fallar</span></div>
+  </div>
+</div>
+<div class="cap">Diálogo de error (con reintento automático y modo desatendido)</div>
+
+<!-- Opciones -->
+<div class="win" style="width:660px">
+  <div class="title"><div class="logo"></div>Opciones<div class="sp"></div><span class="btnw">&#10005;</span></div>
+  <div class="grid">
+    <div class="side">
+      <div>General</div><div class="on">Motor de copia</div><div>Colisiones</div><div>Errores</div>
+      <div>Verificación</div><div>Filtros / ignorar</div><div>Integración Explorer</div><div>Apariencia / temas</div>
+      <div>Idioma</div><div>Registros e informes</div><div>Automatización</div>
+    </div>
+    <div class="body" style="flex:1">
+      <div class="row" style="margin-top:0"><span class="lbl" style="width:190px">Hilos por dispositivo</span><span class="sel">Auto (SSD 4 · HDD 1)</span></div>
+      <div class="row"><span class="lbl" style="width:190px">Tamaño de bloque</span><span class="sel">Adaptativo (64 KB – 8 MB)</span></div>
+      <div class="row"><span class="lbl" style="width:190px">E/S sin búfer desde</span><span class="sel">16 MB</span></div>
+      <div class="row"><span class="lbl" style="width:190px">Límite de velocidad</span><div class="rng"><i></i><b></b></div><span class="val">40 MB/s</span></div>
+      <hr>
+      <div class="row"><span class="chk on"></span><span class="lbl">Preservar fechas, atributos, ACL y flujos alternativos (ADS)</span></div>
+      <div class="row"><span class="chk on"></span><span class="lbl">Rutas largas (&gt;260 caracteres) mediante \\?\</span></div>
+      <div class="row"><span class="chk on"></span><span class="lbl">Reanudar transferencias incompletas (archivo lateral .mcpart)</span></div>
+      <div class="row"><span class="chk"></span><span class="lbl">Copiar archivos bloqueados usando instantáneas VSS</span></div>
+      <div class="row"><span class="chk on"></span><span class="lbl">Precomprobar espacio libre en destino antes de empezar</span></div>
+      <div class="row"><span class="chk"></span><span class="lbl">Poner en cola por dispositivo (evita thrashing en HDD)</span></div>
+      <hr>
+      <div class="row"><span class="lbl" style="width:190px">Al terminar</span><span class="sel">No hacer nada &#9662;</span><span class="lbl">(cerrar · apagar · script PS1)</span></div>
+    </div>
+  </div>
+</div>
+<div class="cap">Opciones — pestaña "Motor de copia"</div>
+
+<!-- Tray -->
+<div style="display:flex;flex-direction:column;gap:10px;align-items:center">
+  <div class="tray">
+    <div class="hl"><b>MaxCopier</b> · 63% · 212 MB/s <div class="s">D:\Fotos\2024 &#8594; E:\Backup — ~4 min</div></div>
+    <div>Pausar todo</div>
+    <div>Límite de velocidad &#9656;</div>
+    <div>Trabajos (5) &#9656;</div>
+    <div>Abrir ventana principal</div>
+    <div>Cargar lista de copia…</div>
+    <div>Opciones</div>
+    <div>Salir</div>
+  </div>
+  <div class="cap" style="width:300px">Menú de la bandeja del sistema</div>
+
+  <div class="tray" style="width:330px">
+    <div class="hl"><b>MaxCopier</b> · Explorador (menú contextual)</div>
+    <div>Copiar con MaxCopier</div>
+    <div>Mover con MaxCopier</div>
+    <div>Pegar con MaxCopier</div>
+    <div>MaxCopier &#9656; <span class="s">Copiar a favorito · Verificar hash · Crear .sha256</span></div>
+  </div>
+  <div class="cap" style="width:330px">Integración con el Explorador (IExplorerCommand)</div>
+</div>
+
+</body>
+</html>
