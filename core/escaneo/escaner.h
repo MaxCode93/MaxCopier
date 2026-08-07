@@ -41,6 +41,7 @@ public slots:
     void reiniciar();
     /// Pausa o reanuda la enumeración. Es seguro invocarlo desde otro hilo:
     /// solo cambia una bandera atómica y el escaneo la observa entre entradas.
+    void establecerPausa(bool pausada);
     void alternarPausa();
     void cancelar();
 

@@ -109,7 +109,7 @@ int main(int argc, char **argv)
     comprobar(QDir().mkpath(destino), "se crea el destino de la prueba de pausa");
 
     QStringList origenes;
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 12; ++i) {
         const QString ruta = temporal.filePath(QStringLiteral("archivo-%1.bin").arg(i));
         comprobar(crearArchivo(ruta, char('a' + i)), "se prepara un archivo de la prueba de pausa");
         origenes.append(ruta);
@@ -159,10 +159,15 @@ int main(int argc, char **argv)
     }
     comprobar(reanudarHabilitado, "la UI sigue habilitada para reanudar tras pausar");
 
+    const int porcentajePausado = ventana.porcentajeBandeja();
     ventana.pausarDesdeBandeja();
-    comprobar(esperar(aplicacion, [&] { return !ventana.pausada(); }, 1500),
+    const bool reanudada = esperar(aplicacion, [&] { return !ventana.pausada(); }, 1500);
+    comprobar(reanudada,
         "reanudar una copia activa vuelve a activar los motores");
-    comprobar(esperar(aplicacion, [&] { return !ventana.ocupada(); }, 12000),
+    comprobar(esperar(aplicacion, [&] {
+        return !ventana.ocupada() || ventana.porcentajeBandeja() > porcentajePausado;
+    }, 5000), "reanudar una cola grande hace avanzar de nuevo la transferencia");
+    comprobar(esperar(aplicacion, [&] { return !ventana.ocupada(); }, 25000),
         "la copia reanudada termina sin dejar la ventana bloqueada");
 
     Configuracion configuracionLenta(temporal.filePath(QStringLiteral("config-lenta.mc")));
